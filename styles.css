@@ -32,13 +32,14 @@ a:active {
 }
 
 .list-animal-photo-block {
-	height: 400px;}
+	height: 400px;
+}
 
 .list-animal-photo {
 	border-style: none;
     	border-width: 0;
 	height: 400px;
-	max-width: 400px;
+	max-width: 400px !important;
 }
 
 .list-animal-info-block 
