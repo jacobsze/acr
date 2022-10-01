@@ -6,6 +6,8 @@
 /***********************************************************
  Page: List of Animals
 ************************************************************/
+@import url('https://fonts.googleapis.com/css?family=Open+Sans');
+
 .list-body {
 	background-color: #F8FCF8	
 }
@@ -37,14 +39,14 @@
 }
 
 .list-animal-id {
-	font-family: "Open Sans";
+	font-family: "Open Sans", sans-serif;
 	font-size: 70%;
 	line-height: 125%;
 	color: #666666;
 }
 
 .list-animal-name {
-	font-family: "Open Sans";
+	font-family: "Open Sans", sans-serif;
 	color: #666666;
 	font-size: 90%;
 	font-weight: bold;
