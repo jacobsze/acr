@@ -31,19 +31,20 @@ a:active {
 	vertical-align: top;	
 }
 
-.list-animal-photo-block {}
+.list-animal-photo-block {
+	height: 400px;}
 
 .list-animal-photo {
-    border-style: none;
-    border-width: 0;
-    width: 250px
+	border-style: none;
+    	border-width: 0;
+    	width: 250px;
+	height: 400px;
 }
 
 .list-animal-info-block 
 {
 	display: table;
 	width: 250px;	
-	height: 400px;
 	margin-top: 0px;
 	margin-right: auto;
 	margin-bottom: 12px;
