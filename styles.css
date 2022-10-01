@@ -36,13 +36,14 @@ a:active {
 .list-animal-photo {
     border-style: none;
     border-width: 0;
-    height: 150px
+    width: 250px
 }
 
 .list-animal-info-block 
 {
 	display: table;
 	width: 250px;	
+	height: 400px;
 	margin-top: 0px;
 	margin-right: auto;
 	margin-bottom: 12px;
