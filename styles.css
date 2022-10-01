@@ -13,14 +13,6 @@ a:active {
 	color: #8571AC;
 }
 
-a:hover::before {
-	content: "😸 ";
-}
-
-a:hover::after {
-	content: " 😸";
-}
-
 /***********************************************************
  Page: List of Animals
 ************************************************************/
@@ -66,7 +58,7 @@ a:hover::after {
 .list-animal-name {
 	font-family: "Open Sans", sans-serif;
 	color: #666666;
-	font-size: 90%;
+	font-size: 110%;
 	font-weight: bold;
 	margin-bottom: 3px;
 	margin-left: 0px;
@@ -74,11 +66,19 @@ a:hover::after {
 	margin-top: 0px;
 }
 
+.list-animal-name:hover::before {
+	content: "😸 ";
+}
+
+.list-animal-name:hover::after {
+	content: " 😸";
+}
+
 .list-animal-sexSN, .list-animal-breed, .list-animal-age, .list-animal-detail, .list-animal-breed, .list-animal-foundtype
 {
 	margin-top: 3px;
 	margin-bottom: 3px;
-	font-family: "Verdana", "Helvetica", "Arial", sans-serif;
+	font-family: "Open Sans", sans-serif;
 	font-size: 70%;	
 	color: #666666;
 }
@@ -89,7 +89,7 @@ a:hover::after {
 
 .detail-body {
 	background-color: white;
-	font-family: "Verdana", "Helvetica", "Arial", sans-serif;
+	font-family: "Open Sans", sans-serif;
 }
 
 .detail-link {
@@ -101,7 +101,7 @@ a:hover::after {
 }
 	
 .detail-table {
-	font-family: "Verdana", "Helvetica", "Arial", sans-serif;
+	font-family: "Open Sans", sans-serif;
 	font-size: 70%;
 	margin-bottom: 6px;
 	margin-left: 3px;
@@ -149,7 +149,7 @@ a:hover::after {
 }
 
 .detail-animal-name {
-	font-family: "Verdana", "Helvetica", "Arial", sans-serif;
+	font-family: "Open Sans", sans-serif;
 	font-size: large;
 	font-weight: bold;
 	color: #0191f9;
@@ -165,7 +165,7 @@ a:hover::after {
 }
 
 .detail-animal-desc {
-	font-family: "Verdana", "Helvetica", "Arial", sans-serif;
+	font-family: "Open Sans", sans-serif;
 	font-size: 14px;
 	line-height: 150%;
 	margin: 10px 0px;
