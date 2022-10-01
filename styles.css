@@ -32,6 +32,7 @@ a:active {
 }
 
 .list-animal-photo-block {
+	width: 360px;
 	height: 400px;
 }
 
