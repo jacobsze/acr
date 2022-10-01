@@ -5,6 +5,7 @@
 
 a:link, a:visited, a:hover {
 	text-decoration: none;
+	font-weight: 1000;
 	color: #6368DA;
 }
 
@@ -74,13 +75,21 @@ a:active {
 	content: " 😸";
 }
 
+.list-anima-species {
+	display: none;
+}
+
 .list-animal-sexSN, .list-animal-breed, .list-animal-age, .list-animal-detail, .list-animal-breed, .list-animal-foundtype
 {
 	margin-top: 3px;
 	margin-bottom: 3px;
 	font-family: "Open Sans", sans-serif;
-	font-size: 70%;	
-	color: #666666;
+	font-size: 90%;	
+	color: #373F51;
+}
+
+.list-animal-detail {
+	font-size: 70%;
 }
 
 /***********************************************************
