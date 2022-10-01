@@ -1,6 +1,8 @@
 /***********************************************************
  Common Elements
 ************************************************************/
+@import url('https://fonts.googleapis.com/css?family=Open+Sans');
+
 a:link, a:visited, a:hover {
 	text-decoration: none;
 	color: #6368DA;
@@ -22,7 +24,7 @@ a:hover::after {
 /***********************************************************
  Page: List of Animals
 ************************************************************/
-@import url('https://fonts.googleapis.com/css?family=Open+Sans');
+
 
 .list-body {
 	background-color: #F8FCF8	
