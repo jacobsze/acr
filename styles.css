@@ -1,9 +1,22 @@
 /***********************************************************
  Common Elements
 ************************************************************/
-a:link {
+a:link, a:visited, a:hover {
 	text-decoration: none;
-	color: #373F51;
+	color: #6368DA;
+}
+
+a:active {
+	text-decoration: none;
+	color: #8571AC;
+}
+
+a:hover::before {
+	content: "😸 ";
+}
+
+a:hover::after {
+	content: " 😸";
 }
 
 /***********************************************************
