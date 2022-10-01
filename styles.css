@@ -7,7 +7,7 @@
  Page: List of Animals
 ************************************************************/
 .list-body {
-	background-color: white	
+	background-color: #F8FCF8	
 }
 
 .list-table {}
@@ -23,13 +23,13 @@
 .list-animal-photo {
     border-style: none;
     border-width: 0;
-    height: 100px
+    height: 150px
 }
 
 .list-animal-info-block 
 {
 	display: table;
-	width: 130px;	
+	width: 250px;	
 	margin-top: 0px;
 	margin-right: auto;
 	margin-bottom: 12px;
@@ -37,14 +37,14 @@
 }
 
 .list-animal-id {
-	font-family: "Verdana", "Helvetica", "Arial", sans-serif;
+	font-family: "Open Sans";
 	font-size: 70%;
 	line-height: 125%;
 	color: #666666;
 }
 
 .list-animal-name {
-	font-family: "Verdana", "Helvetica", "Arial", sans-serif;
+	font-family: "Open Sans";
 	color: #666666;
 	font-size: 90%;
 	font-weight: bold;
