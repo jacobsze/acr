@@ -33,6 +33,8 @@ a:active {
 
 .list-animal-photo-block {
 	height: 300px;
+	display: inline-flex;
+	align-items: center;
 }
 
 .list-animal-photo {
