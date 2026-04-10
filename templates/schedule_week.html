@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Schedule – {{ week_start.strftime('%b %-d') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 mb-3">
+  <h5 class="mb-0">
+    <i class="bi bi-calendar3"></i>
+    Week of {{ week_start.strftime('%B %-d') }}–{{ week_end.strftime('%-d, %Y') }}
+  </h5>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-chevron-left"></i> Prev
+    </a>
+    <a href="{{ url_for('schedule.week_view', week_start=current_week_start) }}"
+       class="btn btn-outline-secondary btn-sm">Today</a>
+    <a href="{{ url_for('schedule.week_view', week_start=next_week) }}" class="btn btn-outline-secondary btn-sm">
+      Next <i class="bi bi-chevron-right"></i>
+    </a>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="d-flex gap-3 mb-3 flex-wrap small">
+  <span><span class="legend-dot full"></span> Full (3)</span>
+  <span><span class="legend-dot partial"></span> Partial</span>
+  <span><span class="legend-dot empty"></span> Open</span>
+  <span><span class="legend-dot tentative"></span> Tentative (from regular schedule)</span>
+</div>
+
+<div class="table-responsive">
+<table class="table table-bordered schedule-table">
+  <thead>
+    <tr>
+      <th class="shift-label-col"></th>
+      {% for d in week_dates %}
+        <th class="text-center {% if d == today %}today-col{% endif %}">
+          <div class="day-name">{{ day_names[loop.index0][:3] }}</div>
+          <div class="day-date {% if d == today %}text-primary fw-bold{% endif %}">
+            {{ d.strftime('%-m/%-d') }}
+          </div>
+        </th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for shift_type in ['AM', 'PM'] %}
+    <tr>
+      <td class="shift-label text-center">
+        <span class="badge acr-shift-badge">{{ shift_type }}</span>
+      </td>
+      {% for d in week_dates %}
+        {% set slot = schedule[d][shift_type] %}
+        <td class="shift-cell
+          {% if slot.is_tentative %}tentative-cell
+          {% elif slot.is_full %}full-cell
+          {% elif slot.count > 0 %}partial-cell
+          {% else %}empty-cell{% endif %}">
+
+          <!-- Volunteer list -->
+          <ul class="volunteer-list">
+            {% for v in slot.volunteers %}
+            <li class="volunteer-item">
+              <span class="{% if v.id == current_user.id %}fw-bold text-primary{% endif %}">
+                {{ v.name }}
+              </span>
+              {% if current_user.is_admin_or_owner() or v.id == current_user.id %}
+                <form method="post" action="{{ url_for('schedule.unassign') }}" class="d-inline">
+                  <input type="hidden" name="date" value="{{ d.isoformat() }}">
+                  <input type="hidden" name="shift_type" value="{{ shift_type }}">
+                  <input type="hidden" name="user_id" value="{{ v.id }}">
+                  <button type="submit" class="btn btn-link btn-sm p-0 ms-1 remove-btn"
+                          title="Remove {{ v.name }}">
+                    <i class="bi bi-x-circle"></i>
+                  </button>
+                </form>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+
+          <!-- Add self (volunteer) -->
+          {% if not slot.is_full and not slot.user_assigned %}
+            <form method="post" action="{{ url_for('schedule.assign') }}" class="mt-1">
+              <input type="hidden" name="date" value="{{ d.isoformat() }}">
+              <input type="hidden" name="shift_type" value="{{ shift_type }}">
+              <button type="submit" class="btn btn-success btn-sm w-100">
+                <i class="bi bi-plus"></i> Add me
+              </button>
+            </form>
+          {% endif %}
+
+          <!-- Admin: add any volunteer -->
+          {% if current_user.is_admin_or_owner() and not slot.is_full %}
+            <details class="mt-1">
+              <summary class="small text-muted" style="cursor:pointer;">Add volunteer…</summary>
+              <form method="post" action="{{ url_for('schedule.assign') }}" class="mt-1 d-flex gap-1">
+                <input type="hidden" name="date" value="{{ d.isoformat() }}">
+                <input type="hidden" name="shift_type" value="{{ shift_type }}">
+                <select name="user_id" class="form-select form-select-sm">
+                  {% for v in all_volunteers %}
+                    {% if v not in slot.volunteers %}
+                      <option value="{{ v.id }}">{{ v.name }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline-primary btn-sm">
+                  <i class="bi bi-plus"></i>
+                </button>
+              </form>
+            </details>
+          {% endif %}
+
+          {% if slot.is_tentative %}
+            <div class="small text-muted mt-1" style="font-size:0.7rem;">
+              <i class="bi bi-info-circle"></i> Regular schedule
+            </div>
+          {% endif %}
+        </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Expose Python's timedelta to Jinja — just pass dates pre-computed instead.
+// (Already computed server-side via timedelta in the template above.)
+</script>
+{% endblock %}

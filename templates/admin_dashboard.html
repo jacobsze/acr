@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard – Cat Rescue Scheduler{% endblock %}
+
+{% block content %}
+<div class="mt-3 mb-4 d-flex justify-content-between align-items-center">
+  <h4><i class="bi bi-speedometer2"></i> Admin Dashboard</h4>
+  <a href="{{ url_for('schedule.week_view', week_start=week_start.isoformat()) }}"
+     class="btn acr-btn-primary btn-sm">
+    <i class="bi bi-calendar3"></i> View This Week's Schedule
+  </a>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="stat-number">{{ stats.volunteers }}</div>
+        <div class="stat-label">Volunteers</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="stat-number">{{ stats.admins }}</div>
+        <div class="stat-label">Admins</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="stat-number">{{ stats.week_assignments }}</div>
+        <div class="stat-label">Shifts This Week</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="stat-number">{{ stats.regular_entries }}</div>
+        <div class="stat-label">Regular Assignments</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick links -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <a href="{{ url_for('admin.volunteers') }}" class="card card-link text-decoration-none h-100">
+      <div class="card-body">
+        <h5><i class="bi bi-people text-primary"></i> Volunteers</h5>
+        <p class="text-muted small mb-0">Add, edit, or deactivate volunteer accounts.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('admin.regular_schedule') }}" class="card card-link text-decoration-none h-100">
+      <div class="card-body">
+        <h5><i class="bi bi-arrow-repeat text-primary"></i> Regular Schedule</h5>
+        <p class="text-muted small mb-0">Set the default recurring weekly shifts.</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('admin.email_log') }}" class="card card-link text-decoration-none h-100">
+      <div class="card-body">
+        <h5><i class="bi bi-envelope-open text-primary"></i> Email Log</h5>
+        <p class="text-muted small mb-0">Review schedule changes requested via email.</p>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Recent email log -->
+{% if recent_email_logs %}
+<h5 class="mb-2"><i class="bi bi-envelope"></i> Recent Email Activity</h5>
+<div class="table-responsive">
+  <table class="table table-sm table-hover">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>From</th>
+        <th>Subject</th>
+        <th>Status</th>
+        <th>Action parsed</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in recent_email_logs %}
+      <tr>
+        <td class="text-muted small text-nowrap">{{ log.processed_at.strftime('%-m/%-d %H:%M') }}</td>
+        <td class="small">{{ log.sender_email or '—' }}</td>
+        <td class="small">{{ log.subject or '—' }}</td>
+        <td>
+          {% if log.status == 'success' %}
+            <span class="badge bg-success">success</span>
+          {% elif log.status == 'no_action' %}
+            <span class="badge bg-secondary">no action</span>
+          {% else %}
+            <span class="badge bg-danger">failed</span>
+          {% endif %}
+        </td>
+        <td class="small text-muted">
+          {% if log.parsed_action %}
+            {% set parsed = log.parsed_action | tojson %}
+            {{ log.parsed_action[:80] }}…
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

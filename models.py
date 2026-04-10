@@ -1,0 +1,102 @@
+from datetime import datetime
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+
+class User(db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(200), unique=True, nullable=False, index=True)
+    phone = db.Column(db.String(20), nullable=True)
+    # role: owner | admin | volunteer
+    role = db.Column(db.String(20), nullable=False, default="volunteer")
+    # Non-expiring session token stored in browser cookie
+    session_token = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    regular_shifts = db.relationship(
+        "RegularSchedule",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="RegularSchedule.user_id",
+    )
+    assignments = db.relationship(
+        "ShiftAssignment",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="ShiftAssignment.user_id",
+    )
+
+    def is_admin_or_owner(self):
+        return self.role in ("owner", "admin")
+
+
+class OTPToken(db.Model):
+    __tablename__ = "otp_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(200), nullable=False, index=True)
+    token = db.Column(db.String(6), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class RegularSchedule(db.Model):
+    """The repeating weekly template – not tied to specific dates."""
+
+    __tablename__ = "regular_schedule"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    # 0 = Monday … 6 = Sunday
+    day_of_week = db.Column(db.Integer, nullable=False)
+    shift_type = db.Column(db.String(2), nullable=False)  # AM | PM
+
+    user = db.relationship("User", back_populates="regular_shifts", foreign_keys=[user_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "day_of_week", "shift_type", name="uq_regular_shift"),
+    )
+
+
+class ShiftAssignment(db.Model):
+    """Concrete shift assignments for a specific calendar date."""
+
+    __tablename__ = "shift_assignments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    shift_type = db.Column(db.String(2), nullable=False)  # AM | PM
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    notes = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    user = db.relationship("User", back_populates="assignments", foreign_keys=[user_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("date", "shift_type", "user_id", name="uq_shift_assignment"),
+    )
+
+
+class EmailProcessingLog(db.Model):
+    """Audit trail for emails processed from the Google Group."""
+
+    __tablename__ = "email_processing_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    gmail_message_id = db.Column(db.String(100), unique=True, nullable=False)
+    sender_email = db.Column(db.String(200), nullable=True)
+    subject = db.Column(db.String(500), nullable=True)
+    body_snippet = db.Column(db.Text, nullable=True)
+    parsed_action = db.Column(db.Text, nullable=True)  # JSON
+    # status: success | no_action | failed
+    status = db.Column(db.String(50), nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    processed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

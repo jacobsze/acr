@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Manage Admins – Cat Rescue Scheduler{% endblock %}
+
+{% block content %}
+<div class="mt-3 mb-4">
+  <h4><i class="bi bi-shield-lock"></i> Manage Admins</h4>
+  <p class="text-muted small">
+    Admins can edit the schedule and manage volunteers. Only the owner can grant or revoke admin access.
+  </p>
+</div>
+
+<div class="row g-4">
+  <!-- Current admins -->
+  <div class="col-md-6">
+    <h5>Current Admins</h5>
+    {% if admins %}
+      <ul class="list-group">
+        {% for admin in admins %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <strong>{{ admin.name }}</strong>
+              <div class="text-muted small">{{ admin.email }}</div>
+            </div>
+            <form method="post" action="{{ url_for('admin.revoke_admin') }}"
+                  onsubmit="return confirm('Revoke admin access for {{ admin.name }}?')">
+              <input type="hidden" name="user_id" value="{{ admin.id }}">
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-shield-x"></i> Revoke
+              </button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No admins yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Grant admin -->
+  <div class="col-md-6">
+    <h5>Grant Admin Access</h5>
+    {% if volunteers %}
+      <form method="post" action="{{ url_for('admin.grant_admin') }}">
+        <div class="input-group">
+          <select name="user_id" class="form-select">
+            {% for v in volunteers %}
+              <option value="{{ v.id }}">{{ v.name }} ({{ v.email }})</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn acr-btn-primary">
+            <i class="bi bi-shield-check"></i> Grant
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <p class="text-muted">All volunteers are already admins.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

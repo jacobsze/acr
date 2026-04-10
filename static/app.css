@@ -1,0 +1,180 @@
+/* ── Palette (matches existing styles.css) ──────────────────────────────── */
+:root {
+  --acr-primary:   #6368DA;
+  --acr-primary-dk:#4e53b8;
+  --acr-secondary: #8571AC;
+  --acr-bg:        #F8FCF8;
+  --acr-text:      #373F51;
+  --acr-full:      #d4edda;
+  --acr-partial:   #fff3cd;
+  --acr-empty:     #f8d7da;
+  --acr-tentative: #e8eaf6;
+}
+
+body {
+  background: var(--acr-bg);
+  color: var(--acr-text);
+  font-family: 'Open Sans', Arial, sans-serif;
+}
+
+/* ── Navbar ─────────────────────────────────────────────────────────────── */
+.acr-navbar {
+  background: var(--acr-primary);
+  box-shadow: 0 2px 4px rgba(0,0,0,.15);
+}
+.acr-navbar .navbar-brand,
+.acr-navbar .nav-link,
+.acr-navbar .navbar-toggler-icon {
+  color: #fff !important;
+}
+.acr-navbar .nav-link:hover,
+.acr-navbar .nav-link.active {
+  color: rgba(255,255,255,.85) !important;
+  text-decoration: underline;
+}
+.acr-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.acr-btn-primary {
+  background: var(--acr-primary);
+  border-color: var(--acr-primary);
+  color: #fff;
+}
+.acr-btn-primary:hover {
+  background: var(--acr-primary-dk);
+  border-color: var(--acr-primary-dk);
+  color: #fff;
+}
+
+/* ── Role badge ─────────────────────────────────────────────────────────── */
+.acr-role-badge {
+  background: var(--acr-secondary);
+  color: #fff;
+  font-size: .65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+/* ── Login / OTP hero icon ──────────────────────────────────────────────── */
+.acr-hero-icon {
+  font-size: 3rem;
+  color: var(--acr-primary);
+}
+.otp-input {
+  font-size: 2rem;
+  letter-spacing: 0.5rem;
+  font-weight: bold;
+}
+
+/* ── Schedule table ─────────────────────────────────────────────────────── */
+.schedule-table {
+  min-width: 700px;
+  font-size: .875rem;
+}
+.shift-label-col {
+  width: 48px;
+}
+.shift-label {
+  vertical-align: middle;
+}
+.acr-shift-badge {
+  background: var(--acr-primary);
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.day-name {
+  font-weight: 600;
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.day-date {
+  font-size: .85rem;
+}
+.today-col {
+  background: rgba(99, 104, 218, .06);
+}
+.shift-cell {
+  padding: 6px 8px;
+  min-width: 120px;
+  vertical-align: top;
+}
+.full-cell    { background: var(--acr-full); }
+.partial-cell { background: var(--acr-partial); }
+.empty-cell   { background: var(--acr-empty); }
+.tentative-cell { background: var(--acr-tentative); }
+
+/* ── Volunteer list inside shift cell ───────────────────────────────────── */
+.volunteer-list {
+  list-style: none;
+  margin: 0 0 4px 0;
+  padding: 0;
+}
+.volunteer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .82rem;
+  padding: 1px 0;
+}
+.remove-btn {
+  color: #dc3545;
+  line-height: 1;
+  font-size: .85rem;
+}
+.remove-btn:hover { color: #a71d2a; }
+
+/* ── Legend ─────────────────────────────────────────────────────────────── */
+.legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  margin-right: 3px;
+  vertical-align: middle;
+  border: 1px solid rgba(0,0,0,.1);
+}
+.legend-dot.full      { background: var(--acr-full); }
+.legend-dot.partial   { background: var(--acr-partial); }
+.legend-dot.empty     { background: var(--acr-empty); }
+.legend-dot.tentative { background: var(--acr-tentative); }
+
+/* ── Regular schedule table ─────────────────────────────────────────────── */
+.regular-table {
+  font-size: .82rem;
+  min-width: 900px;
+}
+.regular-table .shift-sub {
+  font-size: .7rem;
+  color: #666;
+  font-weight: 500;
+  padding: 2px 4px;
+}
+
+/* ── Admin dashboard stat cards ─────────────────────────────────────────── */
+.stat-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--acr-primary);
+  line-height: 1;
+}
+.stat-label {
+  font-size: .8rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-top: 4px;
+}
+.card-link:hover {
+  border-color: var(--acr-primary);
+  box-shadow: 0 2px 8px rgba(99,104,218,.2);
+}
+.card-link h5 {
+  color: var(--acr-text);
+}

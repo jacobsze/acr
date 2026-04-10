@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Email Log – Cat Rescue Scheduler{% endblock %}
+
+{% block content %}
+<div class="mt-3 mb-3">
+  <h4><i class="bi bi-envelope-open"></i> Email Processing Log</h4>
+  <p class="text-muted small">
+    Emails received by the Google Group and processed by the AI schedule parser.
+    Last 100 entries.
+  </p>
+</div>
+
+{% if logs %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>From</th>
+        <th>Subject</th>
+        <th>Status</th>
+        <th>Parsed Action</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td class="text-nowrap small text-muted">
+          {{ log.processed_at.strftime('%m/%d %H:%M') }}
+        </td>
+        <td class="small">{{ log.sender_email or '—' }}</td>
+        <td class="small">{{ log.subject or '—' }}</td>
+        <td>
+          {% if log.status == 'success' %}
+            <span class="badge bg-success">success</span>
+          {% elif log.status == 'no_action' %}
+            <span class="badge bg-secondary">no action</span>
+          {% elif log.status == 'failed' %}
+            <span class="badge bg-danger">failed</span>
+          {% else %}
+            <span class="badge bg-light text-dark">{{ log.status }}</span>
+          {% endif %}
+        </td>
+        <td class="small">
+          {% if log.parsed_action %}
+            {% set p = log.parsed_action | fromjson %}
+            {% if p.action != 'unknown' %}
+              <strong>{{ p.action | upper }}</strong>
+              {{ p.volunteer_email }} on {{ p.date }} ({{ p.shift_type }})
+              <span class="text-muted">[{{ p.confidence }}]</span>
+            {% else %}
+              <span class="text-muted">Not a schedule request</span>
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if log.error_message %}
+            <span class="text-danger small" title="{{ log.error_message }}">
+              <i class="bi bi-exclamation-triangle"></i> Error
+            </span>
+          {% endif %}
+          {% if log.body_snippet %}
+            <button class="btn btn-link btn-sm p-0" type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#snippet-{{ loop.index }}">
+              <i class="bi bi-chat-text"></i>
+            </button>
+          {% endif %}
+        </td>
+      </tr>
+      {% if log.body_snippet %}
+      <tr class="collapse" id="snippet-{{ loop.index }}">
+        <td colspan="6">
+          <pre class="small bg-light p-2 rounded mb-0" style="white-space:pre-wrap;">{{ log.body_snippet }}</pre>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="text-center text-muted py-5">
+    <i class="bi bi-inbox fs-1"></i>
+    <p class="mt-2">No emails processed yet.</p>
+    <p class="small">Configure Gmail API credentials to enable automatic email monitoring.</p>
+  </div>
+{% endif %}
+{% endblock %}
