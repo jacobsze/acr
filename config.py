@@ -13,7 +13,11 @@ class Config:
     # Owner – gets owner role automatically on startup
     OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "").strip().lower()
 
-    # SMTP (OTP emails)
+    # SendGrid (preferred for cloud hosting – no SMTP port issues)
+    SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+    SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "")
+
+    # SMTP fallback (works on local dev with a Gmail app password)
     SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
     SMTP_USER = os.environ.get("SMTP_USER", "")
