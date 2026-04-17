@@ -27,17 +27,17 @@
 <script>
 window.addEventListener('load', async function () {
   if (!window.Clerk) return;
-  await window.Clerk.load();
+  const clerk = new window.Clerk('{{ config.CLERK_PUBLISHABLE_KEY }}');
+  await clerk.load();
+  window.Clerk = clerk;
 
-  if (window.Clerk.user) {
+  if (clerk.user) {
     window.location.href = '/';
     return;
   }
 
-  window.Clerk.mountSignIn(document.getElementById('clerk-sign-in'), {
+  clerk.mountSignIn(document.getElementById('clerk-sign-in'), {
     afterSignInUrl: '/',
-    // Sign-up is controlled in the Clerk dashboard.
-    // Set "Restrictions → Sign-up mode → Restricted" there to block new emails.
   });
 });
 </script>
