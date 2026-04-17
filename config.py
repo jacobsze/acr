@@ -4,30 +4,41 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _fix_db_url(url: str) -> str:
+    """Render provides postgres:// but SQLAlchemy requires postgresql://"""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
 class Config:
     # Flask
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
-    SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.environ.get("DATABASE_PATH", "./acr.db")
+
+    # Database: prefer DATABASE_URL (Render Postgres), fall back to SQLite
+    _db_url = os.environ.get("DATABASE_URL", "")
+    SQLALCHEMY_DATABASE_URI = (
+        _fix_db_url(_db_url) if _db_url
+        else "sqlite:///" + os.environ.get("DATABASE_PATH", "./acr.db")
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # Owner – gets owner role automatically on startup
+    # Owner – promoted to owner role automatically on startup
     OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "").strip().lower()
 
-    # SendGrid (preferred for cloud hosting – no SMTP port issues)
-    SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
-    SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "")
+    # Public URL of this app (used by Clerk for authorized_parties check)
+    APP_URL = os.environ.get("APP_URL", "")
 
-    # SMTP fallback (works on local dev with a Gmail app password)
-    SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-    SMTP_USER = os.environ.get("SMTP_USER", "")
-    SMTP_PASS = os.environ.get("SMTP_PASS", "")
-    SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "Cat Rescue Scheduler")
+    # Clerk auth
+    CLERK_PUBLISHABLE_KEY = os.environ.get("CLERK_PUBLISHABLE_KEY", "")
+    CLERK_SECRET_KEY = os.environ.get("CLERK_SECRET_KEY", "")
+    # Frontend API URL from Clerk dashboard (e.g. https://prepared-dove-17.clerk.accounts.dev)
+    CLERK_FRONTEND_API_URL = os.environ.get("CLERK_FRONTEND_API_URL", "")
 
-    # Claude API
+    # Claude API (for email parsing)
     ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-    # Gmail API
+    # Gmail API (for monitoring the Google Group inbox)
     GMAIL_CREDENTIALS_FILE = os.environ.get("GMAIL_CREDENTIALS_FILE", "credentials.json")
     GMAIL_TOKEN_FILE = os.environ.get("GMAIL_TOKEN_FILE", "token.json")
     GMAIL_MONITOR_EMAIL = os.environ.get("GMAIL_MONITOR_EMAIL", "acrpetco86@googlegroups.com")
@@ -35,4 +46,3 @@ class Config:
 
     # Business rules
     MAX_VOLUNTEERS_PER_SHIFT = 3
-    OTP_EXPIRY_MINUTES = 10

@@ -13,8 +13,8 @@ class User(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     # role: owner | admin | volunteer
     role = db.Column(db.String(20), nullable=False, default="volunteer")
-    # Non-expiring session token stored in browser cookie
-    session_token = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    # Clerk user ID – set on first sign-in, used for fast session lookups
+    clerk_user_id = db.Column(db.String(100), unique=True, nullable=True, index=True)
     active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
@@ -33,17 +33,6 @@ class User(db.Model):
 
     def is_admin_or_owner(self):
         return self.role in ("owner", "admin")
-
-
-class OTPToken(db.Model):
-    __tablename__ = "otp_tokens"
-
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(200), nullable=False, index=True)
-    token = db.Column(db.String(6), nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False)
-    used = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
 class RegularSchedule(db.Model):
@@ -96,7 +85,6 @@ class EmailProcessingLog(db.Model):
     subject = db.Column(db.String(500), nullable=True)
     body_snippet = db.Column(db.Text, nullable=True)
     parsed_action = db.Column(db.Text, nullable=True)  # JSON
-    # status: success | no_action | failed
-    status = db.Column(db.String(50), nullable=True)
+    status = db.Column(db.String(50), nullable=True)   # success | no_action | failed
     error_message = db.Column(db.Text, nullable=True)
     processed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

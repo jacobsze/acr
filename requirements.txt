@@ -2,6 +2,8 @@ Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
 python-dotenv==1.0.1
 anthropic==0.25.0
+clerk-backend-api==1.5.1
+psycopg2-binary==2.9.9
 google-api-python-client==2.127.0
 google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.0
