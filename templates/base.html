@@ -9,7 +9,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 
   {% if config.CLERK_PUBLISHABLE_KEY %}
-  <script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js" crossorigin="anonymous"></script>
+  <script
+    data-clerk-publishable-key="{{ config.CLERK_PUBLISHABLE_KEY }}"
+    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
+    crossorigin="anonymous"
+  ></script>
   {% endif %}
 </head>
 <body>
@@ -115,11 +119,7 @@
   window.addEventListener('load', async function () {
     const btn = document.getElementById('sign-out-btn');
     if (!btn || !window.Clerk) return;
-    if (!window.Clerk.load) {
-      const clerk = new window.Clerk('{{ config.CLERK_PUBLISHABLE_KEY }}');
-      await clerk.load();
-      window.Clerk = clerk;
-    }
+    await window.Clerk.load();
     btn.addEventListener('click', async function (e) {
       e.preventDefault();
       await window.Clerk.signOut();

@@ -27,16 +27,14 @@
 <script>
 window.addEventListener('load', async function () {
   if (!window.Clerk) return;
-  const clerk = new window.Clerk('{{ config.CLERK_PUBLISHABLE_KEY }}');
-  await clerk.load();
-  window.Clerk = clerk;
+  await window.Clerk.load();
 
-  if (clerk.user) {
+  if (window.Clerk.user) {
     window.location.href = '/';
     return;
   }
 
-  clerk.mountSignIn(document.getElementById('clerk-sign-in'), {
+  window.Clerk.mountSignIn(document.getElementById('clerk-sign-in'), {
     afterSignInUrl: '/',
   });
 });
