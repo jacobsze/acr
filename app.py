@@ -15,6 +15,7 @@ def create_app(config_class=Config) -> Flask:
     with app.app_context():
         db.create_all()
         _ensure_owner_exists(app)
+        _log_db_backend(app)
 
     # ── Blueprints ────────────────────────────────────────────────────────
     from routes.auth_routes import auth_bp
@@ -64,6 +65,14 @@ def _ensure_owner_exists(app: Flask) -> None:
         owner.role = "owner"
         db.session.commit()
         app.logger.info("Promoted %s to owner", owner_email)
+
+
+def _log_db_backend(app: Flask) -> None:
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if uri.startswith("postgresql"):
+        app.logger.info("Database: PostgreSQL (%s)", uri.split("@")[-1])
+    else:
+        app.logger.warning("Database: SQLite (ephemeral – data will not persist on Render!): %s", uri)
 
 
 def _start_email_monitor(app: Flask) -> None:
