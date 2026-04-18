@@ -6,12 +6,17 @@
   <div>
     <h4><i class="bi bi-arrow-repeat"></i> Regular Schedule</h4>
     <p class="text-muted small mb-0">
-      This is the repeating weekly template. Check the box to assign a volunteer to a recurring shift.
-      Actual schedule changes on the Schedule page override this template for specific dates.
+      {% if is_admin %}
+        This is the repeating weekly template. Check the box to assign a volunteer to a recurring shift.
+        Actual schedule changes on the Schedule page override this template for specific dates.
+      {% else %}
+        This is the repeating weekly schedule. Contact an admin to make changes.
+      {% endif %}
     </p>
   </div>
 </div>
 
+{% if is_admin %}
 <form method="post" action="{{ url_for('admin.save_regular_schedule') }}">
   <div class="table-responsive mb-3">
     <table class="table table-bordered align-middle regular-table">
@@ -64,4 +69,42 @@
   </button>
   <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary ms-2">Cancel</a>
 </form>
+
+{% else %}
+
+<div class="table-responsive">
+  <table class="table table-bordered align-middle">
+    <thead>
+      <tr>
+        <th>Day</th>
+        <th>AM</th>
+        <th>PM</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for day in days %}
+      {% set dow = loop.index0 %}
+      <tr>
+        <td class="fw-semibold">{{ day }}</td>
+        {% for shift_type in ['AM', 'PM'] %}
+        <td>
+          {% set assigned = [] %}
+          {% for v in volunteers %}
+            {% if (v.id, dow, shift_type) in regular_set %}
+              {% if assigned.append(v.name) %}{% endif %}
+            {% endif %}
+          {% endfor %}
+          {% if assigned %}
+            {{ assigned | join(', ') }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

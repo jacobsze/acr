@@ -25,7 +25,7 @@
             <input type="tel" name="phone" class="form-control"
                    value="{{ volunteer.phone or '' }}">
           </div>
-          {% if volunteer.role != 'owner' %}
+          {% if current_user.is_admin_or_owner() and volunteer.role != 'owner' %}
           <div class="mb-3">
             <label class="form-label">Role</label>
             {% if current_user.role == 'owner' %}

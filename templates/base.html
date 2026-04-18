@@ -22,7 +22,9 @@
 <nav class="navbar navbar-expand-lg acr-navbar">
   <div class="container-fluid px-3">
     <a class="navbar-brand acr-brand" href="{{ url_for('schedule.index') }}">
-      <i class="bi bi-calendar2-heart"></i> Petco86 Volunteer Schedule
+      <img src="https://static.wixstatic.com/media/3f3e1e_ca71da7c96354a48ac2f4f130c06754b~mv2.gif"
+           alt="Petco86 Logo" height="36" class="me-2" style="border-radius:4px;">
+      Petco86
     </a>
     <button class="navbar-toggler" type="button"
             data-bs-toggle="collapse" data-bs-target="#navMain">
@@ -31,28 +33,26 @@
     <div class="collapse navbar-collapse" id="navMain">
 
       <!-- Centered nav links -->
-      <ul class="navbar-nav mx-auto">
+      <ul class="navbar-nav mx-auto acr-nav-center">
         {% if current_user %}
           <li class="nav-item">
-            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('schedule') %}active{% endif %}"
+            <a class="nav-link acr-main-nav {% if request.endpoint and request.endpoint.startswith('schedule') %}active{% endif %}"
                href="{{ url_for('schedule.index') }}">
               <i class="bi bi-calendar3"></i> Upcoming
             </a>
           </li>
-          {% if current_user.is_admin_or_owner() %}
-            <li class="nav-item">
-              <a class="nav-link {% if request.endpoint == 'admin.regular_schedule' %}active{% endif %}"
-                 href="{{ url_for('admin.regular_schedule') }}">
-                <i class="bi bi-arrow-repeat"></i> Regular Schedule
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link {% if request.endpoint in ('admin.volunteers', 'admin.edit_volunteer') %}active{% endif %}"
-                 href="{{ url_for('admin.volunteers') }}">
-                <i class="bi bi-people"></i> Volunteers
-              </a>
-            </li>
-          {% endif %}
+          <li class="nav-item">
+            <a class="nav-link acr-main-nav {% if request.endpoint == 'admin.regular_schedule' %}active{% endif %}"
+               href="{{ url_for('admin.regular_schedule') }}">
+              <i class="bi bi-arrow-repeat"></i> Regular Schedule
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link acr-main-nav {% if request.endpoint in ('admin.volunteers', 'admin.edit_volunteer') %}active{% endif %}"
+               href="{{ url_for('admin.volunteers') }}">
+              <i class="bi bi-people"></i> Volunteers
+            </a>
+          </li>
         {% endif %}
       </ul>
 

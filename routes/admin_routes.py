@@ -7,7 +7,7 @@ from flask import (
 from sqlalchemy import func
 
 from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog
-from auth_utils import admin_required, owner_required
+from auth_utils import login_required, admin_required, owner_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -55,7 +55,7 @@ def dashboard():
 # ── Volunteers ────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/volunteers")
-@admin_required
+@login_required
 def volunteers():
     all_users = (
         User.query
@@ -124,9 +124,13 @@ def add_volunteer():
 
 
 @admin_bp.route("/volunteers/<int:user_id>/edit", methods=["GET", "POST"])
-@admin_required
+@login_required
 def edit_volunteer(user_id):
     user = User.query.get_or_404(user_id)
+
+    if not g.user.is_admin_or_owner() and g.user.id != user_id:
+        flash("You can only edit your own profile.", "error")
+        return redirect(url_for("admin.volunteers"))
 
     if request.method == "POST":
         name  = request.form.get("name", "").strip()
@@ -178,7 +182,7 @@ def deactivate_volunteer(user_id):
 # ── Regular Schedule ──────────────────────────────────────────────────────────
 
 @admin_bp.route("/regular")
-@admin_required
+@login_required
 def regular_schedule():
     volunteers = (
         User.query
@@ -195,6 +199,7 @@ def regular_schedule():
         volunteers=volunteers,
         regular_set=regular_set,
         days=DAYS_OF_WEEK,
+        is_admin=g.user.is_admin_or_owner(),
     )
 
 
