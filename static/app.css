@@ -153,6 +153,7 @@ body {
 }
 .sched-table {
   font-size: .85rem;
+  width: 100%;
 }
 .sched-date-col {
   width: 110px;

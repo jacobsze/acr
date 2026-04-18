@@ -40,7 +40,7 @@
 
 {# ── Schedule tables (2 weeks) ────────────────────────────────────────────── #}
 {% for week_info in all_weeks %}
-<div class="mb-4">
+<div class="mb-4" style="max-width:600px;">
   <div class="sched-week-hdr text-white text-center py-2 fw-bold">
     {{ week_info.week_start.strftime('%b %-d') }} – {{ week_info.week_end.strftime('%b %-d, %Y') }}
   </div>

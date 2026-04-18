@@ -139,7 +139,7 @@ def week_view(week_start: str):
     # Build 2 weeks
     today = date.today()
     all_weeks = []
-    for i in range(2):
+    for i in range(1):
         ws_i = ws + timedelta(weeks=i)
         week_dates_i = get_week_dates(ws_i)
         all_weeks.append({
