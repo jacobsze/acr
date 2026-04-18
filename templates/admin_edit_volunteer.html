@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Edit {{ volunteer.name }} – Cat Rescue Scheduler{% endblock %}
+{% block title %}Edit {{ volunteer.name }} – Petco86 Volunteer Schedule{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center mt-4">
@@ -25,6 +25,21 @@
             <input type="tel" name="phone" class="form-control"
                    value="{{ volunteer.phone or '' }}">
           </div>
+          {% if volunteer.role != 'owner' %}
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            {% if current_user.role == 'owner' %}
+              <select name="role" class="form-select">
+                <option value="volunteer" {% if volunteer.role == 'volunteer' %}selected{% endif %}>Volunteer</option>
+                <option value="admin" {% if volunteer.role == 'admin' %}selected{% endif %}>Admin</option>
+              </select>
+            {% else %}
+              <input type="hidden" name="role" value="{{ volunteer.role }}">
+              <input type="text" class="form-control" value="{{ volunteer.role }}" disabled>
+              <div class="form-text">Only the owner can change roles.</div>
+            {% endif %}
+          </div>
+          {% endif %}
           <div class="d-flex gap-2">
             <button type="submit" class="btn acr-btn-primary">Save changes</button>
             <a href="{{ url_for('admin.volunteers') }}" class="btn btn-secondary">Cancel</a>
