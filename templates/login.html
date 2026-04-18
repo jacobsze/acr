@@ -22,26 +22,22 @@
 <script>
 window.addEventListener('load', async function () {
   const status = document.getElementById('login-status');
-  if (!window.Clerk) {
+  if (!window.Clerk || !window.clerkPublishableKey) {
     status.textContent = 'Authentication not configured. Please contact the administrator.';
     return;
   }
-  await window.Clerk.load();
-  if (window.Clerk.user) {
+  const clerk = new window.Clerk(window.clerkPublishableKey);
+  await clerk.load({
+    localization: {
+      signIn: { start: { subtitle: 'Please enter your email to sign in' } }
+    }
+  });
+  if (clerk.user) {
     window.location.href = '/';
     return;
   }
-  try {
-    status.style.display = 'none';
-    window.Clerk.mountSignIn(document.getElementById('clerk-sign-in'), {
-      appearance: {},
-      localization: {
-        signIn: { start: { subtitle: 'Please enter your email to sign in' } }
-      }
-    });
-  } catch (e) {
-    window.Clerk.redirectToSignIn({ redirectUrl: window.location.origin + '/' });
-  }
+  status.style.display = 'none';
+  clerk.mountSignIn(document.getElementById('clerk-sign-in'));
 });
 </script>
 {% endblock %}
