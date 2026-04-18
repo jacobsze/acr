@@ -25,7 +25,7 @@
 
 {# ── Week navigation ──────────────────────────────────────────────────────── #}
 {% set va = ('?view_as=' + view_as_user.id|string) if view_as_user else '' %}
-<div class="d-flex align-items-center justify-content-between mt-2 mb-3">
+<div class="d-flex align-items-center justify-content-between mt-2 mb-3 mx-auto" style="max-width:600px;">
   <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}{{ va }}"
      class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-chevron-left"></i> Prev
@@ -40,7 +40,7 @@
 
 {# ── Schedule tables (2 weeks) ────────────────────────────────────────────── #}
 {% for week_info in all_weeks %}
-<div class="mb-4" style="max-width:600px;">
+<div class="mb-4 mx-auto" style="max-width:600px;">
   <div class="sched-week-hdr text-white text-center py-2 fw-bold">
     {{ week_info.week_start.strftime('%b %-d') }} – {{ week_info.week_end.strftime('%b %-d, %Y') }}
   </div>
@@ -83,7 +83,7 @@
                       data-shift-key="{{ d.isoformat() }}|{{ shift_type }}"
                       data-original-id="{{ av.id if av else '' }}"
                       data-original-name="{{ av.name if av else '' }}">
-                <option value="">— empty —</option>
+                <option value=""></option>
                 {% for vol in all_volunteers %}
                   <option value="{{ vol.id }}"
                           {% if av and vol.id == av.id %}selected{% endif %}>
@@ -113,7 +113,7 @@
                 <span class="slot-name {% if vol.id == my_id %}fw-bold text-primary{% endif %}">
                   {{- vol.name -}}
                 </span>
-                {% if vol.id == my_id %}
+                {% if vol.id == my_id and d >= today %}
                   <button type="button"
                           class="btn btn-link btn-sm p-0 ms-1 lh-1 text-danger btn-remove-self"
                           data-date="{{ d.isoformat() }}"
@@ -129,7 +129,7 @@
               {# Empty slot #}
               <div class="sched-slot-row vol-slot vol-empty"
                    data-user-id="">
-                {% if not slot.is_full and not slot.user_assigned and not ns.add_shown %}
+                {% if not slot.is_full and not slot.user_assigned and not ns.add_shown and d >= today %}
                   {% set ns.add_shown = true %}
                   <button type="button"
                           class="btn btn-link btn-sm p-0 lh-1 text-success btn-add-self"
