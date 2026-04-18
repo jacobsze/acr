@@ -145,7 +145,53 @@ body {
 .legend-dot.empty     { background: var(--acr-empty); }
 .legend-dot.tentative { background: var(--acr-tentative); }
 
-/* ── Regular schedule table ─────────────────────────────────────────────── */
+/* ── New row-per-day schedule layout ────────────────────────────────────── */
+.sched-week-hdr {
+  background: #222;
+  font-size: .95rem;
+  letter-spacing: .3px;
+}
+.sched-table {
+  font-size: .85rem;
+}
+.sched-date-col {
+  width: 110px;
+  white-space: nowrap;
+}
+.sched-am-hdr { background: #b8cedd; }
+.sched-pm-hdr { background: #b8d8b8; }
+.sched-am-cell { background: #dce9f3; }
+.sched-pm-cell { background: #daeeda; }
+.sched-shift-cell {
+  padding: 5px 7px;
+  vertical-align: top;
+  min-width: 160px;
+}
+.sched-today-row td {
+  outline: 2px solid var(--acr-primary);
+  outline-offset: -1px;
+}
+.sched-slot-row {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 2px 0;
+  font-size: .82rem;
+}
+.sched-slot-row + .sched-slot-row {
+  border-top: 1px dashed rgba(0,0,0,.1);
+}
+.sched-need-vol {
+  color: #dc3545;
+  font-size: .8rem;
+}
+.slot-select {
+  font-size: .78rem;
+  padding: 1px 4px;
+  height: auto;
+}
+.pending-add .slot-name { color: var(--acr-primary); font-style: italic; }
+.pending-remove .slot-name { text-decoration: line-through; color: #999; }
 .regular-table {
   font-size: .82rem;
   min-width: 900px;

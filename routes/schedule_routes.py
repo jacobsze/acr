@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+import json
 
 from flask import (
     Blueprint, flash, g, redirect, render_template,
@@ -10,16 +11,15 @@ from auth_utils import login_required, get_current_user
 
 schedule_bp = Blueprint("schedule", __name__)
 
-DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
-
-# ── helpers ───────────────────────────────────────────────────────────────────
 
 def get_week_start(for_date: date | None = None) -> date:
-    """Return the Monday that starts the week containing *for_date*."""
+    """Return the Sunday that starts the week containing for_date."""
     if for_date is None:
         for_date = date.today()
-    return for_date - timedelta(days=for_date.weekday())
+    # weekday(): Mon=0 … Sun=6; (weekday+1)%7 = days since last Sunday
+    return for_date - timedelta(days=(for_date.weekday() + 1) % 7)
 
 
 def get_week_dates(week_start: date) -> list[date]:
@@ -27,11 +27,6 @@ def get_week_dates(week_start: date) -> list[date]:
 
 
 def materialize_if_needed(target_date: date, shift_type: str) -> None:
-    """
-    If no ShiftAssignment rows exist for (target_date, shift_type), copy the
-    regular schedule for that day-of-week into concrete assignments so we have
-    a baseline to modify.
-    """
     existing = ShiftAssignment.query.filter_by(
         date=target_date, shift_type=shift_type
     ).count()
@@ -59,25 +54,7 @@ def materialize_if_needed(target_date: date, shift_type: str) -> None:
         db.session.commit()
 
 
-def build_schedule(week_dates: list[date], current_user: User | None) -> dict:
-    """
-    Returns::
-
-        {
-            date: {
-                "AM": {
-                    "volunteers": [User, ...],
-                    "count": int,
-                    "is_full": bool,
-                    "is_tentative": bool,   # True = shown from regular schedule
-                    "user_assigned": bool,
-                },
-                "PM": { ... }
-            },
-            ...
-        }
-    """
-    # Fetch concrete assignments for the whole week in one query
+def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
     week_assignments = (
         ShiftAssignment.query
         .filter(ShiftAssignment.date.in_(week_dates))
@@ -85,7 +62,6 @@ def build_schedule(week_dates: list[date], current_user: User | None) -> dict:
         .all()
     )
 
-    # Group by (date, shift_type)
     actual: dict[tuple, list] = {}
     for a in week_assignments:
         key = (a.date, a.shift_type)
@@ -93,7 +69,6 @@ def build_schedule(week_dates: list[date], current_user: User | None) -> dict:
 
     materialized_keys = set(actual.keys())
 
-    # Fetch regular schedule for lookup
     regular = (
         RegularSchedule.query
         .join(User)
@@ -113,10 +88,10 @@ def build_schedule(week_dates: list[date], current_user: User | None) -> dict:
         for shift_type in ("AM", "PM"):
             key = (d, shift_type)
             if key in materialized_keys:
-                volunteers = actual[key]
+                volunteers = sorted(actual[key], key=lambda u: u.name)
                 is_tentative = False
             else:
-                volunteers = regular_by_dow.get((dow, shift_type), [])
+                volunteers = sorted(regular_by_dow.get((dow, shift_type), []), key=lambda u: u.name)
                 is_tentative = True
 
             schedule[d][shift_type] = {
@@ -124,8 +99,8 @@ def build_schedule(week_dates: list[date], current_user: User | None) -> dict:
                 "count": len(volunteers),
                 "is_full": len(volunteers) >= cap,
                 "is_tentative": is_tentative,
-                "user_assigned": current_user is not None and any(
-                    v.id == current_user.id for v in volunteers
+                "user_assigned": effective_user is not None and any(
+                    v.id == effective_user.id for v in volunteers
                 ),
             }
 
@@ -152,128 +127,143 @@ def week_view(week_start: str):
         ws = get_week_start()
         return redirect(url_for("schedule.week_view", week_start=ws.isoformat()))
 
-    week_dates = get_week_dates(ws)
-    schedule = build_schedule(week_dates, g.user)
+    # "View as" — owner only
+    view_as_user = None
+    view_as_id = request.args.get("view_as", type=int)
+    if g.user.role == "owner" and view_as_id:
+        view_as_user = User.query.filter_by(id=view_as_id, active=True).first()
+
+    effective_user = view_as_user or g.user
+    is_admin_mode = g.user.is_admin_or_owner() and view_as_user is None
+
+    # Build 2 weeks
+    today = date.today()
+    all_weeks = []
+    for i in range(2):
+        ws_i = ws + timedelta(weeks=i)
+        week_dates_i = get_week_dates(ws_i)
+        all_weeks.append({
+            "week_start": ws_i,
+            "week_end": ws_i + timedelta(days=6),
+            "week_dates": week_dates_i,
+            "schedule": build_schedule(week_dates_i, effective_user),
+        })
 
     all_volunteers = (
         User.query.filter_by(active=True).order_by(User.name).all()
-        if g.user.is_admin_or_owner()
+        if is_admin_mode
         else []
     )
+    all_active_users = User.query.filter_by(active=True).order_by(User.name).all()
 
-    today = date.today()
     return render_template(
         "schedule_week.html",
+        all_weeks=all_weeks,
         week_start=ws,
-        week_end=ws + timedelta(days=6),
-        week_dates=week_dates,
         day_names=DAY_NAMES,
-        schedule=schedule,
         prev_week=(ws - timedelta(weeks=1)).isoformat(),
         next_week=(ws + timedelta(weeks=1)).isoformat(),
         current_week_start=get_week_start(today).isoformat(),
         all_volunteers=all_volunteers,
+        all_active_users=all_active_users,
         today=today,
+        cap=current_app.config["MAX_VOLUNTEERS_PER_SHIFT"],
+        view_as_user=view_as_user,
+        effective_user=effective_user,
+        is_admin_mode=is_admin_mode,
     )
 
 
-@schedule_bp.route("/schedule/assign", methods=["POST"])
+@schedule_bp.route("/schedule/bulk_save", methods=["POST"])
 @login_required
-def assign():
-    date_str = request.form.get("date", "")
-    shift_type = request.form.get("shift_type", "")
-    user_id_str = request.form.get("user_id", "")
+def bulk_save():
+    try:
+        changes = json.loads(request.form.get("changes_json", "{}"))
+    except (json.JSONDecodeError, TypeError):
+        flash("Invalid save data.", "error")
+        return redirect(request.referrer or url_for("schedule.index"))
 
-    # Admins may assign any volunteer; volunteers can only add themselves
-    if user_id_str and g.user.is_admin_or_owner():
-        target = User.query.get(int(user_id_str))
+    adds = changes.get("adds", [])
+    removes = changes.get("removes", [])
+    week_start_str = request.form.get("week_start", "")
+    view_as_id = request.form.get("view_as_id", type=int)
+
+    is_admin = g.user.is_admin_or_owner()
+    effective_user = g.user
+
+    if view_as_id and g.user.role == "owner":
+        view_as_user = User.query.filter_by(id=view_as_id, active=True).first()
+        if view_as_user:
+            effective_user = view_as_user
+            is_admin = False  # Owner in "view as" mode acts as that volunteer
+
+    errors = []
+    successes = 0
+
+    for r in removes:
+        try:
+            d = date.fromisoformat(r["date"])
+            shift_type = r["shift_type"]
+            user_id = int(r["user_id"])
+        except (KeyError, ValueError):
+            continue
+
+        if not is_admin and user_id != effective_user.id:
+            errors.append("You can only remove yourself from shifts.")
+            continue
+
+        assignment = ShiftAssignment.query.filter_by(
+            date=d, shift_type=shift_type, user_id=user_id
+        ).first()
+        if assignment:
+            db.session.delete(assignment)
+            successes += 1
+
+    for a in adds:
+        try:
+            d = date.fromisoformat(a["date"])
+            shift_type = a["shift_type"]
+            user_id = int(a["user_id"])
+        except (KeyError, ValueError):
+            continue
+
+        if not is_admin and user_id != effective_user.id:
+            errors.append("You can only add yourself to shifts.")
+            continue
+
+        target = User.query.get(user_id)
         if not target:
-            flash("Volunteer not found.", "error")
-            return redirect(request.referrer or url_for("schedule.index"))
-    else:
-        target = g.user
+            continue
+
+        materialize_if_needed(d, shift_type)
+
+        if ShiftAssignment.query.filter_by(date=d, shift_type=shift_type, user_id=user_id).first():
+            continue
+
+        count = ShiftAssignment.query.filter_by(date=d, shift_type=shift_type).count()
+        if count >= current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]:
+            errors.append(f"Shift on {d.strftime('%b %-d')} {shift_type} is full.")
+            continue
+
+        db.session.add(ShiftAssignment(
+            date=d, shift_type=shift_type,
+            user_id=user_id, created_by_id=g.user.id,
+        ))
+        successes += 1
+
+    db.session.commit()
+
+    if successes:
+        flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}).", "success")
+    for e in errors[:3]:
+        flash(e, "error")
 
     try:
-        target_date = date.fromisoformat(date_str)
-    except (ValueError, TypeError):
-        flash("Invalid date.", "error")
-        return redirect(request.referrer or url_for("schedule.index"))
+        ws = date.fromisoformat(week_start_str)
+    except ValueError:
+        ws = get_week_start()
 
-    if shift_type not in ("AM", "PM"):
-        flash("Invalid shift type.", "error")
-        return redirect(request.referrer or url_for("schedule.index"))
-
-    materialize_if_needed(target_date, shift_type)
-
-    if ShiftAssignment.query.filter_by(
-        date=target_date, shift_type=shift_type, user_id=target.id
-    ).first():
-        flash(f"{target.name} is already on that shift.", "warning")
-    elif (
-        ShiftAssignment.query.filter_by(date=target_date, shift_type=shift_type).count()
-        >= current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
-    ):
-        flash("That shift is already full (3 volunteers).", "error")
-    else:
-        db.session.add(
-            ShiftAssignment(
-                date=target_date,
-                shift_type=shift_type,
-                user_id=target.id,
-                created_by_id=g.user.id,
-            )
-        )
-        db.session.commit()
-        flash(
-            f"{target.name} added to the {shift_type} shift on "
-            f"{target_date.strftime('%A, %B %-d')}.",
-            "success",
-        )
-
-    ws = get_week_start(target_date)
-    return redirect(url_for("schedule.week_view", week_start=ws.isoformat()))
-
-
-@schedule_bp.route("/schedule/unassign", methods=["POST"])
-@login_required
-def unassign():
-    date_str = request.form.get("date", "")
-    shift_type = request.form.get("shift_type", "")
-    user_id_str = request.form.get("user_id", "")
-
-    if user_id_str and g.user.is_admin_or_owner():
-        target_user_id = int(user_id_str)
-    else:
-        target_user_id = g.user.id
-
-    try:
-        target_date = date.fromisoformat(date_str)
-    except (ValueError, TypeError):
-        flash("Invalid date.", "error")
-        return redirect(request.referrer or url_for("schedule.index"))
-
-    if shift_type not in ("AM", "PM"):
-        flash("Invalid shift type.", "error")
-        return redirect(request.referrer or url_for("schedule.index"))
-
-    # Materialize first so the row actually exists to delete
-    materialize_if_needed(target_date, shift_type)
-
-    assignment = ShiftAssignment.query.filter_by(
-        date=target_date, shift_type=shift_type, user_id=target_user_id
-    ).first()
-
-    if not assignment:
-        flash("Assignment not found.", "warning")
-    else:
-        name = assignment.user.name
-        db.session.delete(assignment)
-        db.session.commit()
-        flash(
-            f"{name} removed from the {shift_type} shift on "
-            f"{target_date.strftime('%A, %B %-d')}.",
-            "success",
-        )
-
-    ws = get_week_start(target_date)
-    return redirect(url_for("schedule.week_view", week_start=ws.isoformat()))
+    redirect_url = url_for("schedule.week_view", week_start=ws.isoformat())
+    if view_as_id:
+        redirect_url += f"?view_as={view_as_id}"
+    return redirect(redirect_url)

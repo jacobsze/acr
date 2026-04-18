@@ -1,132 +1,415 @@
 {% extends "base.html" %}
-{% block title %}Schedule – {{ week_start.strftime('%b %-d') }}{% endblock %}
+{% block title %}Upcoming – Petco86 Volunteer Schedule{% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 mb-3">
-  <h5 class="mb-0">
-    <i class="bi bi-calendar3"></i>
-    Week of {{ week_start.strftime('%B %-d') }}–{{ week_end.strftime('%-d, %Y') }}
-  </h5>
-  <div class="d-flex gap-2">
-    <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-chevron-left"></i> Prev
-    </a>
-    <a href="{{ url_for('schedule.week_view', week_start=current_week_start) }}"
-       class="btn btn-outline-secondary btn-sm">Today</a>
-    <a href="{{ url_for('schedule.week_view', week_start=next_week) }}" class="btn btn-outline-secondary btn-sm">
-      Next <i class="bi bi-chevron-right"></i>
-    </a>
+
+{# ── View-as dropdown (owner only) ───────────────────────────────────────── #}
+{% if current_user.role == 'owner' %}
+<div class="d-flex align-items-center gap-2 mt-3 mb-2 flex-wrap">
+  <span class="text-muted small fw-semibold">View as:</span>
+  <select class="form-select form-select-sm" id="view-as-select" style="width:auto; min-width:160px;">
+    <option value="">Myself ({{ current_user.name }})</option>
+    {% for u in all_active_users %}
+      {% if u.id != current_user.id %}
+        <option value="{{ u.id }}" {% if view_as_user and u.id == view_as_user.id %}selected{% endif %}>
+          {{ u.name }}
+        </option>
+      {% endif %}
+    {% endfor %}
+  </select>
+  {% if view_as_user %}
+    <span class="badge bg-info text-dark">Viewing as {{ view_as_user.name }}</span>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Week navigation ──────────────────────────────────────────────────────── #}
+{% set va = ('?view_as=' + view_as_user.id|string) if view_as_user else '' %}
+<div class="d-flex align-items-center justify-content-between mt-2 mb-3">
+  <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}{{ va }}"
+     class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-chevron-left"></i> Prev
+  </a>
+  <a href="{{ url_for('schedule.week_view', week_start=current_week_start) }}{{ va }}"
+     class="btn btn-outline-secondary btn-sm">Today</a>
+  <a href="{{ url_for('schedule.week_view', week_start=next_week) }}{{ va }}"
+     class="btn btn-outline-secondary btn-sm">
+    Next <i class="bi bi-chevron-right"></i>
+  </a>
+</div>
+
+{# ── Schedule tables (2 weeks) ────────────────────────────────────────────── #}
+{% for week_info in all_weeks %}
+<div class="mb-4">
+  <div class="sched-week-hdr text-white text-center py-2 fw-bold">
+    {{ week_info.week_start.strftime('%b %-d') }} – {{ week_info.week_end.strftime('%b %-d, %Y') }}
+  </div>
+  <div class="table-responsive">
+  <table class="table table-bordered sched-table mb-0">
+    <thead>
+      <tr>
+        <th class="sched-date-col"></th>
+        <th class="text-center sched-am-hdr fw-bold">AM</th>
+        <th class="text-center sched-pm-hdr fw-bold">PM</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in week_info.week_dates %}
+      <tr {% if d == today %}class="sched-today-row"{% endif %}>
+
+        {# Day / date column #}
+        <td class="sched-date-col align-middle">
+          <div class="fw-semibold small">{{ day_names[loop.index0] }}</div>
+          <div class="text-muted" style="font-size:.72rem;">
+            {{ d.strftime('%-m/%-d/%Y') }}
+          </div>
+        </td>
+
+        {# AM and PM cells #}
+        {% for shift_type in ['AM', 'PM'] %}
+        {% set slot = week_info.schedule[d][shift_type] %}
+        {% set vols = slot.volunteers %}
+        <td class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}">
+
+          {% if is_admin_mode %}
+          {# ── ADMIN: one dropdown per slot ─────────────────────────────── #}
+          {% for slot_idx in range(cap) %}
+            {% set av = vols[slot_idx] if slot_idx < vols|length else none %}
+            <div class="sched-slot-row">
+              <select class="slot-select form-select form-select-sm"
+                      data-date="{{ d.isoformat() }}"
+                      data-shift-type="{{ shift_type }}"
+                      data-slot-idx="{{ slot_idx }}"
+                      data-shift-key="{{ d.isoformat() }}|{{ shift_type }}"
+                      data-original-id="{{ av.id if av else '' }}"
+                      data-original-name="{{ av.name if av else '' }}">
+                <option value="">— empty —</option>
+                {% for vol in all_volunteers %}
+                  <option value="{{ vol.id }}"
+                          {% if av and vol.id == av.id %}selected{% endif %}>
+                    {{ vol.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endfor %}
+
+          {% else %}
+          {# ── VOLUNTEER (or owner view-as) view ───────────────────────── #}
+          {% set my_id = effective_user.id %}
+          {% set my_name = effective_user.name %}
+          {% set ns = namespace(add_shown=false) %}
+
+          {% if vols|length == 0 and d >= today %}
+            <div class="sched-slot-row sched-need-vol fw-bold">Need Volunteers</div>
+          {% endif %}
+
+          {% for slot_idx in range(cap) %}
+            {% if slot_idx < vols|length %}
+              {# Filled slot #}
+              {% set vol = vols[slot_idx] %}
+              <div class="sched-slot-row vol-slot {% if vol.id == my_id %}is-mine{% endif %}"
+                   data-user-id="{{ vol.id }}">
+                <span class="slot-name {% if vol.id == my_id %}fw-bold text-primary{% endif %}">
+                  {{- vol.name -}}
+                </span>
+                {% if vol.id == my_id %}
+                  <button type="button"
+                          class="btn btn-link btn-sm p-0 ms-1 lh-1 text-danger btn-remove-self"
+                          data-date="{{ d.isoformat() }}"
+                          data-shift-type="{{ shift_type }}"
+                          data-user-id="{{ vol.id }}"
+                          data-user-name="{{ vol.name }}"
+                          title="Remove me">
+                    <i class="bi bi-dash-circle"></i>
+                  </button>
+                {% endif %}
+              </div>
+            {% else %}
+              {# Empty slot #}
+              <div class="sched-slot-row vol-slot vol-empty"
+                   data-user-id="">
+                {% if not slot.is_full and not slot.user_assigned and not ns.add_shown %}
+                  {% set ns.add_shown = true %}
+                  <button type="button"
+                          class="btn btn-link btn-sm p-0 lh-1 text-success btn-add-self"
+                          data-date="{{ d.isoformat() }}"
+                          data-shift-type="{{ shift_type }}"
+                          data-user-id="{{ my_id }}"
+                          data-user-name="{{ my_name }}"
+                          title="Add me to this shift">
+                    <i class="bi bi-plus-circle"></i>
+                  </button>
+                {% else %}
+                  <span class="text-muted" style="font-size:.7rem;">—</span>
+                {% endif %}
+              </div>
+            {% endif %}
+          {% endfor %}
+
+          {% endif %}{# end admin/volunteer branch #}
+        </td>
+        {% endfor %}{# shift_type #}
+      </tr>
+      {% endfor %}{# day #}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endfor %}{# week #}
+
+{# ── Fixed save bar (hidden until changes pending) ───────────────────────── #}
+<div id="save-bar"
+     class="d-none position-fixed bottom-0 start-0 end-0 bg-white border-top shadow px-3 py-2"
+     style="z-index:1050;">
+  <div class="d-flex align-items-center justify-content-between">
+    <span class="small text-muted" id="pending-label"></span>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-discard">
+        Discard
+      </button>
+      <button type="button" class="btn btn-success btn-sm" id="btn-save">
+        <i class="bi bi-check-circle"></i> Save
+      </button>
+    </div>
   </div>
 </div>
 
-<!-- Legend -->
-<div class="d-flex gap-3 mb-3 flex-wrap small">
-  <span><span class="legend-dot full"></span> Full (3)</span>
-  <span><span class="legend-dot partial"></span> Partial</span>
-  <span><span class="legend-dot empty"></span> Open</span>
-  <span><span class="legend-dot tentative"></span> Tentative (from regular schedule)</span>
+{# ── Confirmation modal ───────────────────────────────────────────────────── #}
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm changes</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="confirm-body">
+        <p class="text-muted small mb-2">The following changes will be saved:</p>
+        <ul class="list-unstyled mb-0" id="confirm-list"></ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="btn-confirm">
+          <i class="bi bi-check-circle"></i> Confirm &amp; Save
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
-<div class="table-responsive">
-<table class="table table-bordered schedule-table">
-  <thead>
-    <tr>
-      <th class="shift-label-col"></th>
-      {% for d in week_dates %}
-        <th class="text-center {% if d == today %}today-col{% endif %}">
-          <div class="day-name">{{ day_names[loop.index0][:3] }}</div>
-          <div class="day-date {% if d == today %}text-primary fw-bold{% endif %}">
-            {{ d.strftime('%-m/%-d') }}
-          </div>
-        </th>
-      {% endfor %}
-    </tr>
-  </thead>
-  <tbody>
-    {% for shift_type in ['AM', 'PM'] %}
-    <tr>
-      <td class="shift-label text-center">
-        <span class="badge acr-shift-badge">{{ shift_type }}</span>
-      </td>
-      {% for d in week_dates %}
-        {% set slot = schedule[d][shift_type] %}
-        <td class="shift-cell
-          {% if slot.is_tentative %}tentative-cell
-          {% elif slot.is_full %}full-cell
-          {% elif slot.count > 0 %}partial-cell
-          {% else %}empty-cell{% endif %}">
+{# ── Hidden form (submitted on confirm) ──────────────────────────────────── #}
+<form id="save-form" method="post" action="{{ url_for('schedule.bulk_save') }}">
+  <input type="hidden" id="changes-input" name="changes_json" value="{}">
+  <input type="hidden" name="week_start" value="{{ week_start.isoformat() }}">
+  {% if view_as_user %}
+    <input type="hidden" name="view_as_id" value="{{ view_as_user.id }}">
+  {% endif %}
+</form>
 
-          <!-- Volunteer list -->
-          <ul class="volunteer-list">
-            {% for v in slot.volunteers %}
-            <li class="volunteer-item">
-              <span class="{% if v.id == current_user.id %}fw-bold text-primary{% endif %}">
-                {{ v.name }}
-              </span>
-              {% if current_user.is_admin_or_owner() or v.id == current_user.id %}
-                <form method="post" action="{{ url_for('schedule.unassign') }}" class="d-inline">
-                  <input type="hidden" name="date" value="{{ d.isoformat() }}">
-                  <input type="hidden" name="shift_type" value="{{ shift_type }}">
-                  <input type="hidden" name="user_id" value="{{ v.id }}">
-                  <button type="submit" class="btn btn-link btn-sm p-0 ms-1 remove-btn"
-                          title="Remove {{ v.name }}">
-                    <i class="bi bi-x-circle"></i>
-                  </button>
-                </form>
-              {% endif %}
-            </li>
-            {% endfor %}
-          </ul>
-
-          <!-- Add self (volunteer) -->
-          {% if not slot.is_full and not slot.user_assigned %}
-            <form method="post" action="{{ url_for('schedule.assign') }}" class="mt-1">
-              <input type="hidden" name="date" value="{{ d.isoformat() }}">
-              <input type="hidden" name="shift_type" value="{{ shift_type }}">
-              <button type="submit" class="btn btn-success btn-sm w-100">
-                <i class="bi bi-plus"></i> Add me
-              </button>
-            </form>
-          {% endif %}
-
-          <!-- Admin: add any volunteer -->
-          {% if current_user.is_admin_or_owner() and not slot.is_full %}
-            <details class="mt-1">
-              <summary class="small text-muted" style="cursor:pointer;">Add volunteer…</summary>
-              <form method="post" action="{{ url_for('schedule.assign') }}" class="mt-1 d-flex gap-1">
-                <input type="hidden" name="date" value="{{ d.isoformat() }}">
-                <input type="hidden" name="shift_type" value="{{ shift_type }}">
-                <select name="user_id" class="form-select form-select-sm">
-                  {% for v in all_volunteers %}
-                    {% if v not in slot.volunteers %}
-                      <option value="{{ v.id }}">{{ v.name }}</option>
-                    {% endif %}
-                  {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-outline-primary btn-sm">
-                  <i class="bi bi-plus"></i>
-                </button>
-              </form>
-            </details>
-          {% endif %}
-
-          {% if slot.is_tentative %}
-            <div class="small text-muted mt-1" style="font-size:0.7rem;">
-              <i class="bi bi-info-circle"></i> Regular schedule
-            </div>
-          {% endif %}
-        </td>
-      {% endfor %}
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Expose Python's timedelta to Jinja — just pass dates pre-computed instead.
-// (Already computed server-side via timedelta in the template above.)
+const IS_ADMIN = {{ 'true' if is_admin_mode else 'false' }};
+const MY_ID    = {{ effective_user.id }};
+const MY_NAME  = {{ effective_user.name | tojson }};
+
+let pendingAdds    = [];   // {date, shift_type, user_id, name}
+let pendingRemoves = [];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function fmtDate(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+}
+
+function updateSaveBar() {
+  const n = pendingAdds.length + pendingRemoves.length;
+  const bar = document.getElementById('save-bar');
+  document.getElementById('pending-label').textContent =
+    n === 0 ? '' : `${n} unsaved change${n > 1 ? 's' : ''}`;
+  bar.classList.toggle('d-none', n === 0);
+}
+
+// ── Admin mode: rebuild from selects ───────────────────────────────────────
+
+function rebuildFromSelects() {
+  pendingAdds = [];
+  pendingRemoves = [];
+  document.querySelectorAll('.slot-select').forEach(sel => {
+    const origId   = sel.dataset.originalId   || '';
+    const origName = sel.dataset.originalName || '';
+    const newId    = sel.value;
+    const date     = sel.dataset.date;
+    const st       = sel.dataset.shiftType;
+    if (origId === newId) return;
+    if (origId) pendingRemoves.push({date, shift_type: st, user_id: origId,  name: origName});
+    if (newId)  {
+      const opt  = sel.querySelector(`option[value="${newId}"]`);
+      pendingAdds.push({date, shift_type: st, user_id: newId, name: opt ? opt.textContent.trim() : newId});
+    }
+  });
+  updateSaveBar();
+}
+
+if (IS_ADMIN) {
+  document.querySelectorAll('.slot-select').forEach(sel =>
+    sel.addEventListener('change', rebuildFromSelects)
+  );
+}
+
+// ── Volunteer mode: +/– buttons ────────────────────────────────────────────
+
+function btnData(btn) {
+  return {
+    date:  btn.dataset.date,
+    st:    btn.dataset.shiftType,
+    uid:   btn.dataset.userId   || String(MY_ID),
+    uname: btn.dataset.userName || MY_NAME,
+  };
+}
+
+function attachVolListeners(root) {
+  root.querySelectorAll('.btn-add-self').forEach(b =>
+    b.addEventListener('click', () => doAdd(b))
+  );
+  root.querySelectorAll('.btn-remove-self').forEach(b =>
+    b.addEventListener('click', () => doRemove(b))
+  );
+}
+
+function doAdd(btn) {
+  const {date, st, uid, uname} = btnData(btn);
+  // Cancel any pending remove for this shift
+  pendingRemoves = pendingRemoves.filter(r => !(r.date===date && r.shift_type===st));
+  // Add if not already pending
+  if (!pendingAdds.find(a => a.date===date && a.shift_type===st)) {
+    pendingAdds.push({date, shift_type:st, user_id:uid, name:uname});
+  }
+  // Update slot DOM
+  const slot = btn.closest('.vol-slot');
+  slot.classList.remove('vol-empty');
+  slot.classList.add('is-mine', 'pending-add');
+  slot.dataset.userId = uid;
+  slot.innerHTML = mineHTML(date, st, uid, uname);
+  attachVolListeners(slot);
+  // Hide other + buttons in this cell
+  btn.closest('td').querySelectorAll('.btn-add-self').forEach(b => {
+    const s = b.closest('.vol-slot');
+    s.innerHTML = '<span class="text-muted" style="font-size:.7rem;">—</span>';
+    s.classList.remove('vol-empty');
+  });
+  updateSaveBar();
+}
+
+function doRemove(btn) {
+  const {date, st, uid, uname} = btnData(btn);
+  const slot = btn.closest('.vol-slot');
+  const isPendingAdd = pendingAdds.findIndex(a => a.date===date && a.shift_type===st);
+  if (isPendingAdd >= 0) {
+    // Cancel the pending add
+    pendingAdds.splice(isPendingAdd, 1);
+    slot.classList.remove('is-mine', 'pending-add');
+    slot.classList.add('vol-empty');
+    slot.dataset.userId = '';
+    slot.innerHTML = addBtnHTML(date, st, uid, uname);
+    attachVolListeners(slot);
+  } else {
+    // Mark existing assignment for removal
+    if (!pendingRemoves.find(r => r.date===date && r.shift_type===st)) {
+      pendingRemoves.push({date, shift_type:st, user_id:uid, name:uname});
+    }
+    slot.classList.add('pending-remove');
+    slot.innerHTML = undoHTML(date, st, uid, uname);
+    attachVolListeners(slot);
+    // Show + button in first genuinely empty slot of this cell
+    const cell = slot.closest('td');
+    const emptySlot = Array.from(cell.querySelectorAll('.vol-slot.vol-empty')).find(s => !s.querySelector('.btn-add-self'));
+    if (emptySlot) {
+      emptySlot.innerHTML = addBtnHTML(date, st, uid, uname);
+      attachVolListeners(emptySlot);
+    }
+  }
+  updateSaveBar();
+}
+
+function doUndo(btn) {
+  const {date, st, uid, uname} = btnData(btn);
+  pendingRemoves = pendingRemoves.filter(r => !(r.date===date && r.shift_type===st));
+  const slot = btn.closest('.vol-slot');
+  slot.classList.remove('pending-remove');
+  slot.innerHTML = mineHTML(date, st, uid, uname);
+  attachVolListeners(slot);
+  // Remove any + button that was shown in an empty slot for this shift
+  const cell = slot.closest('td');
+  cell.querySelectorAll('.vol-slot.vol-empty .btn-add-self').forEach(b => {
+    const s = b.closest('.vol-slot');
+    s.innerHTML = '<span class="text-muted" style="font-size:.7rem;">—</span>';
+  });
+  updateSaveBar();
+}
+
+function mineHTML(date, st, uid, uname) {
+  return `<span class="slot-name fw-bold text-primary">${uname}</span>
+    <button type="button" class="btn btn-link btn-sm p-0 ms-1 lh-1 text-danger btn-remove-self"
+      data-date="${date}" data-shift-type="${st}" data-user-id="${uid}" data-user-name="${uname}"
+      title="Remove me"><i class="bi bi-dash-circle"></i></button>`;
+}
+
+function addBtnHTML(date, st, uid, uname) {
+  return `<button type="button" class="btn btn-link btn-sm p-0 lh-1 text-success btn-add-self"
+    data-date="${date}" data-shift-type="${st}" data-user-id="${uid}" data-user-name="${uname}"
+    title="Add me"><i class="bi bi-plus-circle"></i></button>`;
+}
+
+function undoHTML(date, st, uid, uname) {
+  return `<span class="slot-name text-muted text-decoration-line-through">${uname}</span>
+    <button type="button" class="btn btn-link btn-sm p-0 ms-1 lh-1 text-secondary"
+      data-date="${date}" data-shift-type="${st}" data-user-id="${uid}" data-user-name="${uname}"
+      title="Undo" onclick="doUndo(this)"><i class="bi bi-arrow-counterclockwise"></i></button>`;
+}
+
+// Attach initial volunteer listeners
+if (!IS_ADMIN) attachVolListeners(document.body);
+
+// ── Save bar buttons ────────────────────────────────────────────────────────
+
+document.getElementById('btn-discard')?.addEventListener('click', () => window.location.reload());
+
+document.getElementById('btn-save')?.addEventListener('click', () => {
+  const list = document.getElementById('confirm-list');
+  list.innerHTML = '';
+  pendingRemoves.forEach(r => {
+    list.innerHTML += `<li class="text-danger mb-1">
+      <i class="bi bi-dash-circle"></i>
+      Remove <strong>${r.name}</strong> from ${r.shift_type} on ${fmtDate(r.date)}
+    </li>`;
+  });
+  pendingAdds.forEach(a => {
+    list.innerHTML += `<li class="text-success mb-1">
+      <i class="bi bi-plus-circle"></i>
+      Add <strong>${a.name}</strong> to ${a.shift_type} on ${fmtDate(a.date)}
+    </li>`;
+  });
+  new bootstrap.Modal(document.getElementById('confirmModal')).show();
+});
+
+document.getElementById('btn-confirm')?.addEventListener('click', () => {
+  document.getElementById('changes-input').value = JSON.stringify({
+    adds:    pendingAdds.map(a => ({date:a.date, shift_type:a.shift_type, user_id:a.user_id})),
+    removes: pendingRemoves.map(r => ({date:r.date, shift_type:r.shift_type, user_id:r.user_id})),
+  });
+  document.getElementById('save-form').submit();
+});
+
+// ── "View as" dropdown ─────────────────────────────────────────────────────
+
+document.getElementById('view-as-select')?.addEventListener('change', function() {
+  const url = new URL(window.location.href);
+  if (this.value) url.searchParams.set('view_as', this.value);
+  else            url.searchParams.delete('view_as');
+  window.location.href = url.toString();
+});
 </script>
 {% endblock %}
