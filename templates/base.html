@@ -9,11 +9,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 
   {% if config.CLERK_PUBLISHABLE_KEY %}
-  <script
-    data-clerk-publishable-key="{{ config.CLERK_PUBLISHABLE_KEY }}"
-    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
-    crossorigin="anonymous"
-  ></script>
+  <script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js" crossorigin="anonymous"></script>
+  <script>window.clerkPublishableKey = '{{ config.CLERK_PUBLISHABLE_KEY }}';</script>
   {% endif %}
 </head>
 <body>
@@ -118,11 +115,12 @@
 <script>
   window.addEventListener('load', async function () {
     const btn = document.getElementById('sign-out-btn');
-    if (!btn || !window.Clerk) return;
-    await window.Clerk.load();
+    if (!btn || !window.Clerk || !window.clerkPublishableKey) return;
+    const clerk = new window.Clerk(window.clerkPublishableKey);
+    await clerk.load();
     btn.addEventListener('click', async function (e) {
       e.preventDefault();
-      await window.Clerk.signOut();
+      await clerk.signOut();
       window.location.href = '{{ url_for("auth.logout") }}';
     });
   });

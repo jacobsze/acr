@@ -6,13 +6,14 @@
   <div class="col-sm-10 col-md-6 col-lg-4 text-center">
     <i class="bi bi-calendar2-heart acr-hero-icon"></i>
     <h4 class="mt-2">Cat Rescue Scheduler</h4>
-    <p class="text-muted" id="login-status">Redirecting to sign-in…</p>
+    <p class="text-muted" id="login-status">Loading…</p>
     {% if not config.CLERK_PUBLISHABLE_KEY %}
     <div class="alert alert-warning text-start mt-3">
       <strong>Setup required:</strong> Add <code>CLERK_PUBLISHABLE_KEY</code> and
       <code>CLERK_SECRET_KEY</code> to your environment variables.
     </div>
     {% endif %}
+    <div id="clerk-sign-in" class="mt-3"></div>
   </div>
 </div>
 {% endblock %}
@@ -20,16 +21,22 @@
 {% block scripts %}
 <script>
 window.addEventListener('load', async function () {
-  if (!window.Clerk) {
-    document.getElementById('login-status').textContent =
-      'Authentication not configured. Please contact the administrator.';
+  const status = document.getElementById('login-status');
+  if (!window.Clerk || !window.clerkPublishableKey) {
+    status.textContent = 'Authentication not configured. Please contact the administrator.';
     return;
   }
-  await window.Clerk.load();
-  if (window.Clerk.user) {
+  const clerk = new window.Clerk(window.clerkPublishableKey);
+  await clerk.load({
+    localization: {
+      signIn: { start: { subtitle: 'Please enter your email to sign in' } }
+    }
+  });
+  if (clerk.user) {
     window.location.href = '/';
   } else {
-    window.Clerk.redirectToSignIn({ redirectUrl: window.location.origin + '/' });
+    status.style.display = 'none';
+    clerk.mountSignIn(document.getElementById('clerk-sign-in'));
   }
 });
 </script>
