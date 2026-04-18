@@ -22,22 +22,30 @@
 <script>
 window.addEventListener('load', async function () {
   const status = document.getElementById('login-status');
-  if (!window.Clerk || !window.clerkPublishableKey) {
-    status.textContent = 'Authentication not configured. Please contact the administrator.';
+  if (!window.Clerk) {
+    status.textContent = 'Debug: window.Clerk is ' + typeof window.Clerk;
     return;
   }
-  const clerk = new window.Clerk(window.clerkPublishableKey);
-  await clerk.load({
-    localization: {
-      signIn: { start: { subtitle: 'Please enter your email to sign in' } }
+  if (!window.clerkPublishableKey) {
+    status.textContent = 'Debug: key is empty/undefined';
+    return;
+  }
+  try {
+    const clerk = new window.Clerk(window.clerkPublishableKey);
+    await clerk.load({
+      localization: {
+        signIn: { start: { subtitle: 'Please enter your email to sign in' } }
+      }
+    });
+    if (clerk.user) {
+      window.location.href = '/';
+      return;
     }
-  });
-  if (clerk.user) {
-    window.location.href = '/';
-    return;
+    status.style.display = 'none';
+    clerk.mountSignIn(document.getElementById('clerk-sign-in'));
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
   }
-  status.style.display = 'none';
-  clerk.mountSignIn(document.getElementById('clerk-sign-in'));
 });
 </script>
 {% endblock %}
