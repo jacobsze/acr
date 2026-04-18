@@ -6,7 +6,7 @@
   <div class="col-sm-10 col-md-6 col-lg-4 text-center">
     <i class="bi bi-calendar2-heart acr-hero-icon"></i>
     <h4 class="mt-2">Cat Rescue Scheduler</h4>
-    <p class="text-muted" id="login-status">Loading…</p>
+    <p class="text-muted" id="login-status">Loading sign-in…</p>
     {% if not config.CLERK_PUBLISHABLE_KEY %}
     <div class="alert alert-warning text-start mt-3">
       <strong>Setup required:</strong> Add <code>CLERK_PUBLISHABLE_KEY</code> and
@@ -22,21 +22,25 @@
 <script>
 window.addEventListener('load', async function () {
   const status = document.getElementById('login-status');
-  if (!window.Clerk || !window.clerkPublishableKey) {
+  if (!window.Clerk) {
     status.textContent = 'Authentication not configured. Please contact the administrator.';
     return;
   }
-  const clerk = new window.Clerk(window.clerkPublishableKey);
-  await clerk.load({
-    localization: {
-      signIn: { start: { subtitle: 'Please enter your email to sign in' } }
-    }
-  });
-  if (clerk.user) {
+  await window.Clerk.load();
+  if (window.Clerk.user) {
     window.location.href = '/';
-  } else {
+    return;
+  }
+  try {
     status.style.display = 'none';
-    clerk.mountSignIn(document.getElementById('clerk-sign-in'));
+    window.Clerk.mountSignIn(document.getElementById('clerk-sign-in'), {
+      appearance: {},
+      localization: {
+        signIn: { start: { subtitle: 'Please enter your email to sign in' } }
+      }
+    });
+  } catch (e) {
+    window.Clerk.redirectToSignIn({ redirectUrl: window.location.origin + '/' });
   }
 });
 </script>
