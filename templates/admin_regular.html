@@ -51,7 +51,7 @@
             {% set slot_vols = regular_by_slot.get((dow, shift_type), []) %}
             {% for slot_idx in range(cap) %}
               {% set av = slot_vols[slot_idx] if slot_idx < slot_vols|length else none %}
-              <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}" style="padding:4px 6px;">
+              <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}">
                 <select name="spot_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
                         class="regular-slot-select form-select form-select-sm">
                   <option value=""></option>

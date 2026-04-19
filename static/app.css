@@ -189,16 +189,18 @@ body {
 }
 .sched-am-hdr { background: #b8cedd; }
 .sched-pm-hdr { background: #b8d8b8; }
-.sched-am-cell { background: #dce9f3; }
-.sched-pm-cell { background: #daeeda; }
+.sched-am-cell { }
+.sched-pm-cell { }
 
-/* Alternating row tints */
-.sched-table tbody tr:nth-child(odd) .sched-am-cell,
-.regular-sched-table tbody tr:nth-child(odd) .sched-am-cell { background: #edf4fb; }
-.sched-table tbody tr:nth-child(odd) .sched-pm-cell,
-.regular-sched-table tbody tr:nth-child(odd) .sched-pm-cell { background: #edf8ed; }
-.sched-table tbody tr:nth-child(even) > td:first-child,
-.regular-sched-table tbody tr:nth-child(even) > td:first-child { background: #f6f6f6; }
+/* Alternating row colors — same color across AM and PM */
+.sched-table tbody tr:nth-child(odd),
+.regular-sched-table tbody tr:nth-child(odd) { background: #f2f1fb; }
+.sched-table tbody tr:nth-child(even),
+.regular-sched-table tbody tr:nth-child(even) { background: #ffffff; }
+
+/* Volunteers table alternating rows */
+.vol-table tbody tr:nth-child(odd)  { background: #f2f1fb; }
+.vol-table tbody tr:nth-child(even) { background: #ffffff; }
 .sched-shift-cell {
   padding: 5px 7px;
   vertical-align: top;
@@ -264,6 +266,9 @@ body {
 .regular-day-col {
   width: 52px;
   font-size: .85rem;
+}
+.regular-sched-table td {
+  padding: 8px 12px;
 }
 .ts-wrapper.regular-slot-select .ts-control {
   padding: 2px 6px;
