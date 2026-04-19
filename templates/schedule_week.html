@@ -69,7 +69,7 @@
         {% for shift_type in ['AM', 'PM'] %}
         {% set slot = week_info.schedule[d][shift_type] %}
         {% set vols = slot.volunteers %}
-        <td class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}">
+        <td class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if slot.count == 0 and d >= today %} sched-no-vol{% endif %}">
 
           {% if is_admin_mode %}
           {# ── ADMIN: one dropdown per slot ─────────────────────────────── #}

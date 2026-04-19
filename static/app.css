@@ -210,6 +210,9 @@ body {
 .sched-slot-row + .sched-slot-row {
   border-top: 1px dashed rgba(0,0,0,.1);
 }
+.sched-no-vol {
+  background: #fdd !important;
+}
 .sched-need-vol {
   color: #dc3545;
   font-size: .8rem;
