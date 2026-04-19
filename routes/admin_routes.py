@@ -14,6 +14,16 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
+def normalize_phone(raw: str) -> tuple[str, str]:
+    """Return (formatted, error). Strips non-digits; requires exactly 10."""
+    digits = "".join(c for c in raw if c.isdigit())
+    if not digits:
+        return "", ""
+    if len(digits) != 10:
+        return "", "Phone number must be exactly 10 digits."
+    return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}", ""
+
+
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/")
@@ -104,6 +114,11 @@ def add_volunteer():
         flash("Name and email are required.", "error")
         return redirect(url_for("admin.volunteers"))
 
+    phone, phone_err = normalize_phone(phone)
+    if phone_err:
+        flash(phone_err, "error")
+        return redirect(url_for("admin.volunteers"))
+
     existing = User.query.filter_by(email=email).first()
     if existing:
         if not existing.active:
@@ -140,6 +155,11 @@ def edit_volunteer(user_id):
 
         if not name or not email:
             flash("Name and email are required.", "error")
+            return render_template("admin_edit_volunteer.html", volunteer=user)
+
+        phone, phone_err = normalize_phone(phone)
+        if phone_err:
+            flash(phone_err, "error")
             return render_template("admin_edit_volunteer.html", volunteer=user)
 
         clash = User.query.filter_by(email=email).first()
