@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from flask import (
     Blueprint, flash, g, redirect, render_template,
-    request, url_for,
+    request, url_for, current_app,
 )
 from sqlalchemy import func
 
@@ -181,6 +181,12 @@ def deactivate_volunteer(user_id):
 
 # ── Regular Schedule ──────────────────────────────────────────────────────────
 
+DAYS_DISPLAY = [
+    (6, "Sun"), (0, "Mon"), (1, "Tue"), (2, "Wed"),
+    (3, "Thu"), (4, "Fri"), (5, "Sat"),
+]
+
+
 @admin_bp.route("/regular")
 @login_required
 def regular_schedule():
@@ -190,15 +196,27 @@ def regular_schedule():
         .order_by(User.name)
         .all()
     )
-    regular_set = {
-        (rs.user_id, rs.day_of_week, rs.shift_type)
-        for rs in RegularSchedule.query.all()
-    }
+    cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
+
+    all_regular = (
+        RegularSchedule.query
+        .join(User)
+        .filter(User.active.is_(True))
+        .all()
+    )
+    regular_by_slot: dict = {}
+    for rs in all_regular:
+        key = (rs.day_of_week, rs.shift_type)
+        regular_by_slot.setdefault(key, []).append(rs.user)
+    for key in regular_by_slot:
+        regular_by_slot[key].sort(key=lambda u: u.name)
+
     return render_template(
         "admin_regular.html",
         volunteers=volunteers,
-        regular_set=regular_set,
-        days=DAYS_OF_WEEK,
+        regular_by_slot=regular_by_slot,
+        days_display=DAYS_DISPLAY,
+        cap=cap,
         is_admin=g.user.is_admin_or_owner(),
     )
 
@@ -207,18 +225,20 @@ def regular_schedule():
 @admin_required
 def save_regular_schedule():
     active_ids = {u.id for u in User.query.filter_by(active=True).all()}
+    cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
 
     new_set: set[tuple] = set()
-    for key in request.form:
-        if key.startswith("shift_"):
-            parts = key.split("_", 3)
-            if len(parts) == 4:
-                try:
-                    uid, dow, stype = int(parts[1]), int(parts[2]), parts[3]
-                    if uid in active_ids and 0 <= dow <= 6 and stype in ("AM", "PM"):
-                        new_set.add((uid, dow, stype))
-                except (ValueError, IndexError):
-                    pass
+    for dow in range(7):
+        for shift_type in ("AM", "PM"):
+            for slot_idx in range(cap):
+                val = request.form.get(f"spot_{dow}_{shift_type}_{slot_idx}", "").strip()
+                if val:
+                    try:
+                        uid = int(val)
+                        if uid in active_ids:
+                            new_set.add((uid, dow, shift_type))
+                    except ValueError:
+                        pass
 
     current = {
         (rs.user_id, rs.day_of_week, rs.shift_type): rs

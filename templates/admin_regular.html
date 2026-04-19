@@ -1,16 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Regular Schedule – Petco86 Volunteer Schedule{% endblock %}
 
+{% block head_extra %}
+{% if is_admin %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="mt-3 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <h4><i class="bi bi-arrow-repeat"></i> Regular Schedule</h4>
     <p class="text-muted small mb-0">
       {% if is_admin %}
-        This is the repeating weekly template. Check the box to assign a volunteer to a recurring shift.
-        Actual schedule changes on the Schedule page override this template for specific dates.
+        Repeating weekly template. Actual schedule changes on the Upcoming page override this for specific dates.
       {% else %}
-        This is the repeating weekly schedule. Contact an admin to make changes.
+        Repeating weekly schedule. Contact an admin to make changes.
       {% endif %}
     </p>
   </div>
@@ -19,46 +24,45 @@
 {% if is_admin %}
 <form method="post" action="{{ url_for('admin.save_regular_schedule') }}">
   <div class="table-responsive mb-3">
-    <table class="table table-bordered align-middle regular-table">
+    <table class="table table-bordered align-middle regular-sched-table">
       <thead>
         <tr>
-          <th>Volunteer</th>
-          {% for day in days %}
-            <th class="text-center" colspan="2">{{ day[:3] }}</th>
-          {% endfor %}
+          <th class="regular-day-col"></th>
+          <th colspan="{{ cap }}" class="text-center sched-am-hdr fw-bold">AM Shift</th>
+          <th colspan="{{ cap }}" class="text-center sched-pm-hdr fw-bold">PM Shift</th>
         </tr>
         <tr>
-          <th></th>
-          {% for _ in days %}
-            <th class="text-center shift-sub">AM</th>
-            <th class="text-center shift-sub">PM</th>
+          <th class="regular-day-col"></th>
+          {% for shift_type in ['AM', 'PM'] %}
+            {% for slot_idx in range(cap) %}
+              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.8rem;">
+                Spot {{ slot_idx + 1 }}
+              </th>
+            {% endfor %}
           {% endfor %}
         </tr>
       </thead>
       <tbody>
-        {% for v in volunteers %}
+        {% for dow, day_name in days_display %}
         <tr>
-          <td class="fw-semibold">
-            {{ v.name }}
-            <span class="badge acr-role-badge ms-1">{{ v.role }}</span>
-          </td>
-          {% for dow in range(7) %}
-            {% for shift_type in ['AM', 'PM'] %}
-              <td class="text-center">
-                <input type="checkbox"
-                       name="shift_{{ v.id }}_{{ dow }}_{{ shift_type }}"
-                       class="form-check-input"
-                       {% if (v.id, dow, shift_type) in regular_set %}checked{% endif %}>
+          <td class="fw-semibold regular-day-col">{{ day_name }}</td>
+          {% for shift_type in ['AM', 'PM'] %}
+            {% set slot_vols = regular_by_slot.get((dow, shift_type), []) %}
+            {% for slot_idx in range(cap) %}
+              {% set av = slot_vols[slot_idx] if slot_idx < slot_vols|length else none %}
+              <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}" style="padding:4px 6px;">
+                <select name="spot_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
+                        class="regular-slot-select form-select form-select-sm">
+                  <option value=""></option>
+                  {% for v in volunteers %}
+                    <option value="{{ v.id }}" {% if av and v.id == av.id %}selected{% endif %}>
+                      {{ v.name }}
+                    </option>
+                  {% endfor %}
+                </select>
               </td>
             {% endfor %}
           {% endfor %}
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="{{ 1 + 14 }}" class="text-center text-muted">
-            No volunteers yet.
-            <a href="{{ url_for('admin.volunteers') }}">Add some first.</a>
-          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -67,44 +71,64 @@
   <button type="submit" class="btn acr-btn-primary">
     <i class="bi bi-save"></i> Save Regular Schedule
   </button>
-  <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary ms-2">Cancel</a>
 </form>
 
 {% else %}
 
 <div class="table-responsive">
-  <table class="table table-bordered align-middle">
+  <table class="table table-bordered align-middle regular-sched-table">
     <thead>
       <tr>
-        <th>Day</th>
-        <th>AM</th>
-        <th>PM</th>
+        <th class="regular-day-col"></th>
+        <th colspan="{{ cap }}" class="text-center sched-am-hdr fw-bold">AM Shift</th>
+        <th colspan="{{ cap }}" class="text-center sched-pm-hdr fw-bold">PM Shift</th>
+      </tr>
+      <tr>
+        <th class="regular-day-col"></th>
+        {% for shift_type in ['AM', 'PM'] %}
+          {% for slot_idx in range(cap) %}
+            <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.8rem;">
+              Spot {{ slot_idx + 1 }}
+            </th>
+          {% endfor %}
+        {% endfor %}
       </tr>
     </thead>
     <tbody>
-      {% for day in days %}
-      {% set dow = loop.index0 %}
+      {% for dow, day_name in days_display %}
       <tr>
-        <td class="fw-semibold">{{ day }}</td>
+        <td class="fw-semibold regular-day-col">{{ day_name }}</td>
         {% for shift_type in ['AM', 'PM'] %}
-        <td>
-          {% set assigned = [] %}
-          {% for v in volunteers %}
-            {% if (v.id, dow, shift_type) in regular_set %}
-              {% if assigned.append(v.name) %}{% endif %}
-            {% endif %}
+          {% set slot_vols = regular_by_slot.get((dow, shift_type), []) %}
+          {% for slot_idx in range(cap) %}
+            <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}">
+              {% if slot_idx < slot_vols|length %}
+                {{ slot_vols[slot_idx].name }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
           {% endfor %}
-          {% if assigned %}
-            {{ assigned | join(', ') }}
-          {% else %}
-            <span class="text-muted">—</span>
-          {% endif %}
-        </td>
         {% endfor %}
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if is_admin %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script>
+document.querySelectorAll('.regular-slot-select').forEach(sel => {
+  new TomSelect(sel, {
+    allowEmptyOption: true,
+    maxOptions: null,
+    placeholder: '',
+  });
+});
+</script>
 {% endif %}
 {% endblock %}

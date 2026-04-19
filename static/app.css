@@ -236,6 +236,25 @@ body {
   font-weight: 500;
   padding: 2px 4px;
 }
+.regular-sched-table {
+  font-size: .85rem;
+}
+.regular-day-col {
+  width: 52px;
+  font-size: .85rem;
+}
+.ts-wrapper.regular-slot-select .ts-control {
+  padding: 2px 6px;
+  min-height: unset;
+  font-size: .8rem;
+  flex-wrap: nowrap;
+}
+.ts-wrapper.regular-slot-select .ts-dropdown {
+  font-size: .8rem;
+}
+.ts-wrapper.regular-slot-select .ts-dropdown .option {
+  padding: 3px 8px;
+}
 
 /* ── Admin dashboard stat cards ─────────────────────────────────────────── */
 .stat-number {
