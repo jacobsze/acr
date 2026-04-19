@@ -33,6 +33,17 @@ body {
 .acr-nav-center {
   gap: 8px;
 }
+@media (min-width: 992px) {
+  .navbar .container-fluid {
+    position: relative;
+  }
+  .acr-nav-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+}
 .acr-main-nav {
   padding-left: 14px !important;
   padding-right: 14px !important;
