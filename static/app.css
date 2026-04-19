@@ -208,6 +208,22 @@ body {
   padding: 1px 4px;
   height: auto;
 }
+/* Tom Select compact overrides for slot cells */
+.ts-wrapper.slot-select {
+  font-size: .78rem;
+}
+.ts-wrapper.slot-select .ts-control {
+  padding: 2px 6px;
+  min-height: unset;
+  font-size: .78rem;
+  flex-wrap: nowrap;
+}
+.ts-wrapper.slot-select .ts-dropdown {
+  font-size: .78rem;
+}
+.ts-wrapper.slot-select .ts-dropdown .option {
+  padding: 3px 8px;
+}
 .pending-add .slot-name { color: var(--acr-primary); font-style: italic; }
 .pending-remove .slot-name { text-decoration: line-through; color: #999; }
 .regular-table {
