@@ -19,16 +19,16 @@ body {
 
 /* ── Navbar ─────────────────────────────────────────────────────────────── */
 .acr-navbar {
-  background: var(--acr-primary);
+  background: rgb(210, 201, 227);
   box-shadow: 0 2px 4px rgba(0,0,0,.15);
 }
 .acr-navbar .navbar-brand,
 .acr-navbar .nav-link,
 .acr-navbar .navbar-toggler-icon {
-  color: #fff !important;
+  color: var(--acr-text) !important;
 }
 .acr-navbar .nav-link:hover {
-  color: rgba(255,255,255,.85) !important;
+  color: var(--acr-primary) !important;
 }
 .acr-nav-center {
   gap: 8px;
@@ -40,14 +40,14 @@ body {
   transition: background .15s;
 }
 .acr-main-nav:hover {
-  background: rgba(255,255,255,.12);
-  color: #fff !important;
+  background: rgba(0,0,0,.08);
+  color: var(--acr-primary) !important;
 }
 .acr-main-nav.active {
-  background: rgba(255,255,255,.18) !important;
-  color: #fff !important;
+  background: rgba(0,0,0,.10) !important;
+  color: var(--acr-primary) !important;
   font-weight: 600;
-  box-shadow: inset 0 -3px 0 rgba(255,255,255,.7);
+  box-shadow: inset 0 -3px 0 var(--acr-primary);
 }
 .acr-brand {
   font-weight: 700;
