@@ -212,6 +212,8 @@ def bulk_save():
             errors.append("You can only remove yourself from shifts.")
             continue
 
+        materialize_if_needed(d, shift_type)
+
         assignment = ShiftAssignment.query.filter_by(
             date=d, shift_type=shift_type, user_id=user_id
         ).first()
