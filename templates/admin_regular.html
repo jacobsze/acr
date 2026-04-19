@@ -22,6 +22,7 @@
 </div>
 
 {% if is_admin %}
+<div style="max-width:900px;">
 <form method="post" action="{{ url_for('admin.save_regular_schedule') }}">
   <div class="table-responsive mb-3">
     <table class="table table-bordered align-middle regular-sched-table">
@@ -72,9 +73,11 @@
     <i class="bi bi-save"></i> Save Regular Schedule
   </button>
 </form>
+</div>
 
 {% else %}
 
+<div style="max-width:900px;">
 <div class="table-responsive">
   <table class="table table-bordered align-middle regular-sched-table">
     <thead>
@@ -114,6 +117,7 @@
       {% endfor %}
     </tbody>
   </table>
+</div>
 </div>
 {% endif %}
 {% endblock %}
