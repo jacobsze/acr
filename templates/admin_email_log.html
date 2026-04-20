@@ -70,18 +70,29 @@
             {% endif %}
           {% else %}—{% endif %}
         </td>
-        <td>
+        <td class="text-nowrap">
           {% if log.error_message %}
             <span class="text-danger small" title="{{ log.error_message }}">
               <i class="bi bi-exclamation-triangle"></i> Error
             </span>
           {% endif %}
           {% if log.body_snippet %}
-            <button class="btn btn-link btn-sm p-0" type="button"
+            <button class="btn btn-link btn-sm p-0 me-1" type="button"
                     data-bs-toggle="collapse"
-                    data-bs-target="#snippet-{{ loop.index }}">
+                    data-bs-target="#snippet-{{ loop.index }}"
+                    title="View body">
               <i class="bi bi-chat-text"></i>
             </button>
+          {% endif %}
+          {% if current_user.role == 'owner' %}
+            <form method="post"
+                  action="{{ url_for('admin.reprocess_email', log_id=log.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Re-process this email?')">
+              <button type="submit" class="btn btn-link btn-sm p-0 text-secondary" title="Re-process">
+                <i class="bi bi-arrow-repeat"></i>
+              </button>
+            </form>
           {% endif %}
         </td>
       </tr>

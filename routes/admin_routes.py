@@ -358,6 +358,18 @@ def check_email_now():
     return redirect(url_for("admin.email_log"))
 
 
+@admin_bp.route("/email-log/<int:log_id>/reprocess", methods=["POST"])
+@owner_required
+def reprocess_email(log_id):
+    try:
+        from services.gmail_monitor import reprocess_message
+        reprocess_message(current_app._get_current_object(), log_id)
+        flash("Email re-processed.", "success")
+    except Exception as exc:
+        flash(f"Reprocess failed: {exc}", "error")
+    return redirect(url_for("admin.email_log"))
+
+
 @admin_bp.route("/email-log")
 @admin_required
 def email_log():

@@ -81,14 +81,120 @@ def _extract_content(msg: dict) -> dict:
     return {"subject": subject, "from_email": from_email, "body": body}
 
 
+def _apply_parsed(app, parsed, content):
+    """
+    Try to apply an add/remove action from a parsed result.
+    Returns the resulting status string: 'success' or 'no_action'.
+    """
+    from models import db, User, ShiftAssignment, ScheduleChangeLog
+    from routes.schedule_routes import materialize_if_needed
+
+    action = parsed.get("action")
+    confidence = parsed.get("confidence", "low")
+
+    if action not in ("add", "remove") or confidence not in ("high", "medium"):
+        return "no_action"
+
+    vol_email = parsed.get("volunteer_email")
+    date_str = parsed.get("date")
+    shift_type = parsed.get("shift_type")
+
+    if not (vol_email and date_str and shift_type):
+        return "no_action"
+
+    target_user = User.query.filter_by(email=vol_email, active=True).first()
+    if not target_user:
+        return "no_action"
+
+    target_date = date.fromisoformat(date_str)
+    materialize_if_needed(target_date, shift_type)
+    cap = app.config["MAX_VOLUNTEERS_PER_SHIFT"]
+
+    if action == "add":
+        existing = ShiftAssignment.query.filter_by(
+            date=target_date, shift_type=shift_type, user_id=target_user.id,
+        ).first()
+        count = ShiftAssignment.query.filter_by(
+            date=target_date, shift_type=shift_type,
+        ).count()
+        if not existing and count < cap:
+            db.session.add(ShiftAssignment(
+                date=target_date, shift_type=shift_type, user_id=target_user.id,
+                notes=f"Added via email: {content['subject']}",
+            ))
+            db.session.add(ScheduleChangeLog(
+                log_type="upcoming", date=target_date, shift_type=shift_type,
+                action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
+            ))
+            db.session.commit()
+            return "success"
+
+    elif action == "remove":
+        existing = ShiftAssignment.query.filter_by(
+            date=target_date, shift_type=shift_type, user_id=target_user.id,
+        ).first()
+        if existing:
+            db.session.delete(existing)
+            db.session.add(ScheduleChangeLog(
+                log_type="upcoming", date=target_date, shift_type=shift_type,
+                action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
+            ))
+            db.session.commit()
+            return "success"
+
+    return "no_action"
+
+
+def _process_one(app, service, msg_id, volunteers):
+    """
+    Fetch, parse, and apply a single Gmail message.
+    Returns (status, error_msg, parsed, content).
+    """
+    from services.llm_parser import parse_email_schedule_request
+
+    volunteer_emails = {v.email.lower() for v in volunteers}
+    status = "no_action"
+    error_msg = None
+    parsed = {}
+    content = {"subject": "", "from_email": "", "body": ""}
+
+    try:
+        msg = (
+            service.users()
+            .messages()
+            .get(userId="me", id=msg_id, format="full")
+            .execute()
+        )
+        content = _extract_content(msg)
+
+        if content["from_email"].lower() not in volunteer_emails:
+            app.logger.info(
+                "Gmail monitor: skipping msg %s – sender %s not a volunteer",
+                msg_id, content["from_email"],
+            )
+        else:
+            parsed = parse_email_schedule_request(
+                email_subject=content["subject"],
+                email_body=content["body"],
+                email_from=content["from_email"],
+                volunteers=volunteers,
+            )
+            status = _apply_parsed(app, parsed, content)
+
+    except Exception as exc:
+        app.logger.error("Gmail monitor: error on msg %s – %s", msg_id, exc)
+        status = "failed"
+        error_msg = str(exc)
+
+    return status, error_msg, parsed, content
+
+
 def check_and_process(app) -> None:
     """
     Poll for new group emails, parse them with Claude, and apply any
     schedule changes.  Designed to be called from a background scheduler.
     """
-    from models import db, User, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog
-    from routes.schedule_routes import materialize_if_needed
-    from services.llm_parser import parse_email_schedule_request
+    from models import db, User, EmailProcessingLog
 
     with app.app_context():
         try:
@@ -98,127 +204,27 @@ def check_and_process(app) -> None:
             return
 
         inbox_email = app.config["GMAIL_MONITOR_EMAIL"]
-        query = f"to:{inbox_email}"
-
         try:
             result = (
                 service.users()
                 .messages()
-                .list(userId="me", q=query, maxResults=50)
+                .list(userId="me", q=f"to:{inbox_email}", maxResults=50)
                 .execute()
             )
         except Exception as exc:
             app.logger.error("Gmail monitor: list() failed – %s", exc)
             return
 
-        messages = result.get("messages", [])
         volunteers = User.query.filter_by(active=True).all()
-        volunteer_emails = {v.email.lower() for v in volunteers}
 
-        for meta in messages:
+        for meta in result.get("messages", []):
             msg_id = meta["id"]
-
             if EmailProcessingLog.query.filter_by(gmail_message_id=msg_id).first():
                 continue  # Already processed
 
-            status = "no_action"
-            error_msg = None
-            parsed = {}
-            content = {"subject": "", "from_email": "", "body": ""}
+            status, error_msg, parsed, content = _process_one(app, service, msg_id, volunteers)
 
-            try:
-                msg = (
-                    service.users()
-                    .messages()
-                    .get(userId="me", id=msg_id, format="full")
-                    .execute()
-                )
-                content = _extract_content(msg)
-
-                if content["from_email"].lower() not in volunteer_emails:
-                    app.logger.info(
-                        "Gmail monitor: skipping msg %s – sender %s not a volunteer",
-                        msg_id, content["from_email"],
-                    )
-                else:
-                    parsed = parse_email_schedule_request(
-                        email_subject=content["subject"],
-                        email_body=content["body"],
-                        email_from=content["from_email"],
-                        volunteers=volunteers,
-                    )
-
-                    action = parsed.get("action")
-                    confidence = parsed.get("confidence", "low")
-
-                    if action in ("add", "remove") and confidence in ("high", "medium"):
-                        vol_email = parsed.get("volunteer_email")
-                        date_str = parsed.get("date")
-                        shift_type = parsed.get("shift_type")
-
-                        if vol_email and date_str and shift_type:
-                            target_user = User.query.filter_by(
-                                email=vol_email, active=True
-                            ).first()
-                            target_date = date.fromisoformat(date_str)
-
-                            if target_user:
-                                materialize_if_needed(target_date, shift_type)
-
-                                if action == "add":
-                                    existing = ShiftAssignment.query.filter_by(
-                                        date=target_date,
-                                        shift_type=shift_type,
-                                        user_id=target_user.id,
-                                    ).first()
-                                    count = ShiftAssignment.query.filter_by(
-                                        date=target_date, shift_type=shift_type
-                                    ).count()
-                                    cap = app.config["MAX_VOLUNTEERS_PER_SHIFT"]
-
-                                    if not existing and count < cap:
-                                        db.session.add(ShiftAssignment(
-                                            date=target_date,
-                                            shift_type=shift_type,
-                                            user_id=target_user.id,
-                                            notes=f"Added via email: {content['subject']}",
-                                        ))
-                                        db.session.add(ScheduleChangeLog(
-                                            log_type="upcoming",
-                                            date=target_date,
-                                            shift_type=shift_type,
-                                            action="add",
-                                            volunteer_id=target_user.id,
-                                            volunteer_name=target_user.name,
-                                        ))
-                                        db.session.commit()
-                                        status = "success"
-
-                                elif action == "remove":
-                                    existing = ShiftAssignment.query.filter_by(
-                                        date=target_date,
-                                        shift_type=shift_type,
-                                        user_id=target_user.id,
-                                    ).first()
-                                    if existing:
-                                        db.session.delete(existing)
-                                        db.session.add(ScheduleChangeLog(
-                                            log_type="upcoming",
-                                            date=target_date,
-                                            shift_type=shift_type,
-                                            action="remove",
-                                            volunteer_id=target_user.id,
-                                            volunteer_name=target_user.name,
-                                        ))
-                                        db.session.commit()
-                                        status = "success"
-
-            except Exception as exc:
-                app.logger.error("Gmail monitor: error on msg %s – %s", msg_id, exc)
-                status = "failed"
-                error_msg = str(exc)
-
-            log = EmailProcessingLog(
+            db.session.add(EmailProcessingLog(
                 gmail_message_id=msg_id,
                 sender_email=content.get("from_email", ""),
                 subject=content.get("subject", ""),
@@ -226,6 +232,35 @@ def check_and_process(app) -> None:
                 parsed_action=json.dumps(parsed) if parsed else None,
                 status=status,
                 error_message=error_msg,
-            )
-            db.session.add(log)
+            ))
             db.session.commit()
+
+
+def reprocess_message(app, log_id: int) -> None:
+    """Re-fetch and re-parse a previously logged email, updating the log entry in place."""
+    from models import db, User, EmailProcessingLog
+
+    with app.app_context():
+        log = EmailProcessingLog.query.get_or_404(log_id)
+
+        try:
+            service = _get_service(app)
+        except Exception as exc:
+            log.status = "failed"
+            log.error_message = str(exc)
+            db.session.commit()
+            return
+
+        volunteers = User.query.filter_by(active=True).all()
+        status, error_msg, parsed, content = _process_one(app, service, log.gmail_message_id, volunteers)
+
+        log.status = status
+        log.error_message = error_msg
+        log.parsed_action = json.dumps(parsed) if parsed else None
+        if content.get("from_email"):
+            log.sender_email = content["from_email"]
+        if content.get("subject"):
+            log.subject = content["subject"]
+        if content.get("body"):
+            log.body_snippet = content["body"][:500]
+        db.session.commit()
