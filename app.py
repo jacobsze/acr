@@ -100,6 +100,7 @@ def _start_email_monitor(app: Flask) -> None:
             replace_existing=True,
         )
         scheduler.start()
+        app.email_scheduler = scheduler
         app.logger.info("Email monitor started (every %d min).", interval)
     except ImportError:
         app.logger.warning("APScheduler not installed – email monitor disabled.")

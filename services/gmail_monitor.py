@@ -327,9 +327,16 @@ def check_and_process(app) -> None:
     Poll for new group emails, parse them with Claude, and apply any
     schedule changes.  Designed to be called from a background scheduler.
     """
-    from models import db, User, EmailProcessingLog
+    from datetime import datetime
+    from models import db, User, EmailProcessingLog, AppSetting
 
     with app.app_context():
+        setting = db.session.get(AppSetting, "last_email_check")
+        if setting:
+            setting.value = datetime.utcnow().isoformat()
+        else:
+            db.session.add(AppSetting(key="last_email_check", value=datetime.utcnow().isoformat()))
+        db.session.commit()
         try:
             service = _get_service(app)
         except Exception as exc:

@@ -8,6 +8,21 @@
     <p class="text-muted small mb-0">
       Emails sent to the schedule inbox and processed by the AI parser. Last 100 entries.
     </p>
+    <p class="small mb-0 mt-1">
+      {% if last_check %}
+        <span class="text-muted">Last checked: <strong>{{ last_check.strftime('%b %-d %-I:%M %p') }} UTC</strong></span>
+      {% else %}
+        <span class="text-muted">Last checked: <strong>not yet</strong></span>
+      {% endif %}
+      &nbsp;·&nbsp;
+      {% if next_check %}
+        <span class="text-muted">Next check: <strong>{{ next_check.strftime('%b %-d %-I:%M %p') }} UTC</strong></span>
+      {% else %}
+        <span class="text-muted">Next check: <strong>scheduler not running</strong></span>
+      {% endif %}
+      &nbsp;·&nbsp;
+      <span class="text-muted">Interval: every <strong>{{ check_interval }} min</strong></span>
+    </p>
   </div>
   <form method="post" action="{{ url_for('admin.check_email_now') }}">
     <button type="submit" class="btn acr-btn-primary btn-sm">

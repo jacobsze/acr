@@ -373,13 +373,36 @@ def reprocess_email(log_id):
 @admin_bp.route("/email-log")
 @admin_required
 def email_log():
+    from datetime import datetime, timezone
     logs = (
         EmailProcessingLog.query
         .order_by(EmailProcessingLog.processed_at.desc())
         .limit(100)
         .all()
     )
-    return render_template("admin_email_log.html", logs=logs)
+
+    last_check = None
+    setting = AppSetting.query.get("last_email_check")
+    if setting:
+        try:
+            last_check = datetime.fromisoformat(setting.value)
+        except ValueError:
+            pass
+
+    next_check = None
+    scheduler = getattr(current_app._get_current_object(), "email_scheduler", None)
+    if scheduler:
+        job = scheduler.get_job("gmail_monitor")
+        if job and job.next_run_time:
+            next_check = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return render_template(
+        "admin_email_log.html",
+        logs=logs,
+        last_check=last_check,
+        next_check=next_check,
+        check_interval=current_app.config.get("GMAIL_CHECK_INTERVAL_MINUTES", 5),
+    )
 
 
 # ── AI Settings ───────────────────────────────────────────────────────────────
