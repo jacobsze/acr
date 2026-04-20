@@ -113,6 +113,25 @@ Respond with ONLY a JSON object — no markdown, no extra text:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()
+
+        # Strip markdown code fences if Claude ignored the formatting instruction
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+        if not raw:
+            return {
+                "action": "unknown",
+                "volunteer_email": None,
+                "date": None,
+                "shift_type": None,
+                "confidence": "low",
+                "reason": "Claude returned an empty response.",
+                "error": "Empty response from API",
+            }
+
         result = json.loads(raw)
         result.setdefault("error", None)
         return result
@@ -124,7 +143,7 @@ Respond with ONLY a JSON object — no markdown, no extra text:
             "shift_type": None,
             "confidence": "low",
             "reason": "Could not parse Claude response.",
-            "error": str(exc),
+            "error": f"{exc} | raw: {raw!r}",
         }
     except Exception as exc:
         return {
