@@ -16,11 +16,11 @@
     <thead>
       <tr>
         <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
+        <th class="vol-hide-mobile">Email</th>
+        <th class="vol-hide-mobile">Phone</th>
         <th>Role</th>
-        <th class="text-center">Regular Shifts</th>
-        <th class="text-center">Next 7 Days</th>
+        <th class="text-center vol-hide-mobile">Regular Shifts</th>
+        <th class="text-center vol-hide-mobile">Next 7 Days</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -28,11 +28,11 @@
       {% for v in volunteers %}
       <tr>
         <td>{{ v.name }}</td>
-        <td><a href="mailto:{{ v.email }}">{{ v.email }}</a></td>
-        <td>{{ v.phone or '—' }}</td>
+        <td class="vol-hide-mobile"><a href="mailto:{{ v.email }}">{{ v.email }}</a></td>
+        <td class="vol-hide-mobile">{{ v.phone or '—' }}</td>
         <td><span class="badge acr-role-badge">{{ v.role }}</span></td>
-        <td class="text-center">{{ regular_counts.get(v.id, 0) }}</td>
-        <td class="text-center">{{ upcoming_counts.get(v.id, 0) }}</td>
+        <td class="text-center vol-hide-mobile">{{ regular_counts.get(v.id, 0) }}</td>
+        <td class="text-center vol-hide-mobile">{{ upcoming_counts.get(v.id, 0) }}</td>
         <td>
           {% if current_user.is_admin_or_owner() or current_user.id == v.id %}
           <a href="{{ url_for('admin.edit_volunteer', user_id=v.id) }}"

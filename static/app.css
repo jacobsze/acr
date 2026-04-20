@@ -184,7 +184,7 @@ body {
   width: 100%;
 }
 .sched-date-col {
-  width: 110px;
+  width: 90px;
   white-space: nowrap;
 }
 .sched-am-hdr { background: #b8cedd; }
@@ -204,7 +204,7 @@ body {
 .sched-shift-cell {
   padding: 5px 7px;
   vertical-align: top;
-  min-width: 160px;
+  min-width: 130px;
 }
 .sched-today-row td {
   outline: 2px solid var(--acr-primary);
@@ -213,9 +213,9 @@ body {
 .sched-slot-row {
   display: flex;
   align-items: center;
-  min-height: 26px;
+  min-height: 32px;
   padding: 2px 0;
-  font-size: .82rem;
+  font-size: .85rem;
 }
 .sched-slot-row + .sched-slot-row {
   border-top: 1px dashed rgba(0,0,0,.1);
@@ -303,4 +303,38 @@ body {
 }
 .card-link h5 {
   color: var(--acr-text);
+}
+
+/* ── Mobile overrides ────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Schedule table — narrower columns so the 3-col layout fits a phone */
+  .sched-date-col {
+    width: 62px;
+  }
+  .sched-shift-cell {
+    min-width: 110px;
+    padding: 4px 5px;
+  }
+  /* Bigger tap targets for +/– buttons */
+  .btn-add-self,
+  .btn-remove-self {
+    font-size: 1.2rem !important;
+    padding: 4px 6px !important;
+  }
+  /* Save bar: extra bottom padding for mobile browser chrome */
+  #save-bar {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+  /* Volunteers table: hide columns that aren't useful on a small screen */
+  .vol-hide-mobile {
+    display: none !important;
+  }
+  /* Looser padding on the week header */
+  .sched-week-hdr {
+    font-size: .9rem;
+  }
+  /* Full-width schedule on mobile — remove desktop centering cap */
+  .sched-mobile-full {
+    max-width: 100% !important;
+  }
 }

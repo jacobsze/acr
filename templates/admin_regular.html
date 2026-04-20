@@ -77,7 +77,8 @@
 
 {% else %}
 
-<div style="max-width:900px; margin:0 auto;">
+{# ── Desktop table view ────────────────────────────────────────────────── #}
+<div class="d-none d-md-block" style="max-width:900px; margin:0 auto;">
 <div class="table-responsive">
   <table class="table table-bordered align-middle regular-sched-table">
     <thead>
@@ -119,6 +120,38 @@
   </table>
 </div>
 </div>
+
+{# ── Mobile card view ──────────────────────────────────────────────────── #}
+<div class="d-md-none">
+  {% for dow, day_name in days_display %}
+  {% set am_vols = regular_by_slot.get((dow, 'AM'), []) %}
+  {% set pm_vols = regular_by_slot.get((dow, 'PM'), []) %}
+  <div class="card mb-2">
+    <div class="card-header fw-semibold py-2">{{ day_name }}</div>
+    <div class="card-body py-2 px-3" style="font-size:.9rem;">
+      <div class="row">
+        <div class="col-6">
+          <div class="fw-semibold sched-am-hdr px-1 rounded mb-1 text-center" style="font-size:.8rem;">AM</div>
+          {% if am_vols %}
+            {% for v in am_vols %}<div>{{ v.name }}</div>{% endfor %}
+          {% else %}
+            <div class="text-muted">—</div>
+          {% endif %}
+        </div>
+        <div class="col-6">
+          <div class="fw-semibold sched-pm-hdr px-1 rounded mb-1 text-center" style="font-size:.8rem;">PM</div>
+          {% if pm_vols %}
+            {% for v in pm_vols %}<div>{{ v.name }}</div>{% endfor %}
+          {% else %}
+            <div class="text-muted">—</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
 {% endif %}
 {% endblock %}
 
