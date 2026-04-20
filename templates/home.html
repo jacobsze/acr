@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Home – Petco86 Volunteer Schedule{% endblock %}
+
+{% block content %}
+<div class="mt-3 home-wrap">
+  <h5 class="mb-3">Hi, {{ current_user.name.split()[0] }}!
+    <span class="text-muted fw-normal fs-6">Your next 2 weeks</span>
+  </h5>
+
+  {% for day in days %}
+  {% set any_shift = day.shifts[0].user_assigned or day.shifts[1].user_assigned %}
+  <div class="card mb-2 {% if any_shift %}border-primary{% endif %}">
+    <div class="card-header py-2 d-flex align-items-center gap-2
+                {% if any_shift %}bg-primary text-white{% else %}bg-light{% endif %}">
+      <span class="fw-semibold">{{ day.date.strftime('%A') }}</span>
+      <span class="{% if any_shift %}text-white-50{% else %}text-muted{% endif %} small">
+        {{ day.date.strftime('%b %-d') }}
+      </span>
+      {% if day.date == today %}
+        <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">Today</span>
+      {% endif %}
+    </div>
+    {% for shift in day.shifts %}
+    <div class="px-3 py-2 d-flex align-items-center justify-content-between gap-2
+                {% if not loop.last %}border-bottom{% endif %}">
+      <div class="d-flex align-items-center gap-2 flex-wrap" style="min-width:0;">
+        <span class="badge fw-semibold {% if shift.shift_type == 'AM' %}home-am-badge{% else %}home-pm-badge{% endif %}">
+          {{ shift.shift_type }}
+        </span>
+        {% if shift.user_assigned %}
+          <span class="fw-semibold text-primary">You</span>
+          {% if shift.others %}
+            <span class="text-muted small">+ {{ shift.others | map(attribute='name') | join(', ') }}</span>
+          {% endif %}
+        {% elif shift.count == 0 %}
+          <span class="text-danger small fw-semibold">No volunteers yet</span>
+        {% else %}
+          <span class="text-muted small">{{ shift.volunteers | map(attribute='name') | join(', ') }}</span>
+        {% endif %}
+      </div>
+      {% if day.date >= today %}
+        {% if shift.user_assigned %}
+          <form method="post" action="{{ url_for('schedule.remove_from_shift') }}" class="flex-shrink-0">
+            <input type="hidden" name="date" value="{{ day.date.isoformat() }}">
+            <input type="hidden" name="shift_type" value="{{ shift.shift_type }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm">Remove me</button>
+          </form>
+        {% elif not shift.is_full %}
+          <form method="post" action="{{ url_for('schedule.add_to_shift') }}" class="flex-shrink-0">
+            <input type="hidden" name="date" value="{{ day.date.isoformat() }}">
+            <input type="hidden" name="shift_type" value="{{ shift.shift_type }}">
+            <button type="submit" class="btn btn-outline-success btn-sm">+ Add to shift</button>
+          </form>
+        {% else %}
+          <span class="text-muted small flex-shrink-0">Full</span>
+        {% endif %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -110,12 +110,112 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
 # ── routes ────────────────────────────────────────────────────────────────────
 
 @schedule_bp.route("/")
-def index():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for("auth.login"))
-    ws = get_week_start()
-    return redirect(url_for("schedule.week_view", week_start=ws.isoformat()))
+@login_required
+def home():
+    today = date.today()
+    end = today + timedelta(days=13)
+    cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
+
+    all_assignments = (
+        ShiftAssignment.query
+        .filter(ShiftAssignment.date >= today, ShiftAssignment.date <= end)
+        .join(User, ShiftAssignment.user_id == User.id)
+        .all()
+    )
+    shift_map: dict[tuple, list] = {}
+    for a in all_assignments:
+        shift_map.setdefault((a.date, a.shift_type), []).append(a.user)
+
+    all_regular = RegularSchedule.query.join(User).filter(User.active.is_(True)).all()
+    regular_by_dow: dict[tuple, list] = {}
+    for rs in all_regular:
+        regular_by_dow.setdefault((rs.day_of_week, rs.shift_type), []).append(rs.user)
+
+    days = []
+    for i in range(14):
+        d = today + timedelta(days=i)
+        day_shifts = []
+        for st in ["AM", "PM"]:
+            key = (d, st)
+            if key in shift_map:
+                vols = sorted(shift_map[key], key=lambda u: u.name)
+            else:
+                vols = sorted(regular_by_dow.get((d.weekday(), st), []), key=lambda u: u.name)
+            user_assigned = any(v.id == g.user.id for v in vols)
+            day_shifts.append({
+                "shift_type": st,
+                "volunteers": vols,
+                "others": [v for v in vols if v.id != g.user.id],
+                "user_assigned": user_assigned,
+                "count": len(vols),
+                "is_full": len(vols) >= cap,
+            })
+        days.append({"date": d, "shifts": day_shifts})
+
+    return render_template("home.html", days=days, today=today)
+
+
+@schedule_bp.route("/shifts/add", methods=["POST"])
+@login_required
+def add_to_shift():
+    try:
+        d = date.fromisoformat(request.form["date"])
+        shift_type = request.form["shift_type"]
+    except (KeyError, ValueError):
+        flash("Invalid request.", "error")
+        return redirect(url_for("schedule.home"))
+
+    if d < date.today():
+        flash("Cannot add to a past shift.", "error")
+        return redirect(url_for("schedule.home"))
+
+    materialize_if_needed(d, shift_type)
+
+    if ShiftAssignment.query.filter_by(date=d, shift_type=shift_type, user_id=g.user.id).first():
+        flash("You're already on that shift.", "info")
+        return redirect(url_for("schedule.home"))
+
+    if ShiftAssignment.query.filter_by(date=d, shift_type=shift_type).count() >= current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]:
+        flash("That shift is full.", "error")
+        return redirect(url_for("schedule.home"))
+
+    db.session.add(ShiftAssignment(date=d, shift_type=shift_type, user_id=g.user.id, created_by_id=g.user.id))
+    db.session.add(ScheduleChangeLog(
+        log_type="upcoming", date=d, shift_type=shift_type,
+        action="add", volunteer_id=g.user.id, volunteer_name=g.user.name,
+        changed_by_id=g.user.id,
+    ))
+    db.session.commit()
+    flash(f"Added you to {shift_type} on {d.strftime('%b %-d')}.", "success")
+    return redirect(url_for("schedule.home"))
+
+
+@schedule_bp.route("/shifts/remove", methods=["POST"])
+@login_required
+def remove_from_shift():
+    try:
+        d = date.fromisoformat(request.form["date"])
+        shift_type = request.form["shift_type"]
+    except (KeyError, ValueError):
+        flash("Invalid request.", "error")
+        return redirect(url_for("schedule.home"))
+
+    materialize_if_needed(d, shift_type)
+
+    assignment = ShiftAssignment.query.filter_by(date=d, shift_type=shift_type, user_id=g.user.id).first()
+    if not assignment:
+        flash("You're not on that shift.", "info")
+        return redirect(url_for("schedule.home"))
+
+    db.session.delete(assignment)
+    db.session.add(ScheduleChangeLog(
+        log_type="upcoming", date=d, shift_type=shift_type,
+        action="remove", volunteer_id=g.user.id, volunteer_name=g.user.name,
+        changed_by_id=g.user.id,
+    ))
+    db.session.commit()
+    flash(f"Removed you from {shift_type} on {d.strftime('%b %-d')}.", "success")
+    return redirect(url_for("schedule.home"))
 
 
 @schedule_bp.route("/schedule/<week_start>")

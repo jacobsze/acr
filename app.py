@@ -32,7 +32,14 @@ def create_app(config_class=Config) -> Flask:
 
     @app.context_processor
     def inject_user():
-        return {"current_user": get_current_user()}
+        from datetime import date
+        from routes.schedule_routes import get_week_start
+        today = date.today()
+        return {
+            "current_user": get_current_user(),
+            "today": today,
+            "current_week_start": get_week_start(today),
+        }
 
     @app.template_filter("fromjson")
     def fromjson_filter(value):

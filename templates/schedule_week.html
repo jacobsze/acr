@@ -97,54 +97,44 @@
           {# ── VOLUNTEER (or owner view-as) view ───────────────────────── #}
           {% set my_id = effective_user.id %}
           {% set my_name = effective_user.name %}
-          {% set ns = namespace(add_shown=false) %}
+          {% set show_add = not slot.user_assigned and vols|length < 2 and not slot.is_full and d >= today %}
 
           {% if vols|length == 0 and d >= today %}
             <div class="sched-slot-row sched-need-vol fw-bold">Need Volunteers</div>
           {% endif %}
 
-          {% for slot_idx in range(cap) %}
-            {% if slot_idx < vols|length %}
-              {# Filled slot #}
-              {% set vol = vols[slot_idx] %}
-              <div class="sched-slot-row vol-slot {% if vol.id == my_id %}is-mine{% endif %}"
-                   data-user-id="{{ vol.id }}">
-                <span class="slot-name {% if vol.id == my_id %}fw-bold text-primary{% endif %}">
-                  {{- vol.name -}}
-                </span>
-                {% if vol.id == my_id and d >= today %}
-                  <button type="button"
-                          class="btn btn-link btn-sm p-0 ms-1 lh-1 text-danger btn-remove-self"
-                          data-date="{{ d.isoformat() }}"
-                          data-shift-type="{{ shift_type }}"
-                          data-user-id="{{ vol.id }}"
-                          data-user-name="{{ vol.name }}"
-                          title="Remove me">
-                    <i class="bi bi-dash-circle"></i>
-                  </button>
-                {% endif %}
-              </div>
-            {% else %}
-              {# Empty slot #}
-              <div class="sched-slot-row vol-slot vol-empty"
-                   data-user-id="">
-                {% if not slot.is_full and not slot.user_assigned and not ns.add_shown and d >= today %}
-                  {% set ns.add_shown = true %}
-                  <button type="button"
-                          class="btn btn-link btn-sm p-0 lh-1 text-success btn-add-self"
-                          data-date="{{ d.isoformat() }}"
-                          data-shift-type="{{ shift_type }}"
-                          data-user-id="{{ my_id }}"
-                          data-user-name="{{ my_name }}"
-                          title="Add me to this shift">
-                    <i class="bi bi-plus-circle"></i>
-                  </button>
-                {% else %}
-                  <span class="text-muted" style="font-size:.7rem;">—</span>
-                {% endif %}
-              </div>
-            {% endif %}
+          {% for vol in vols %}
+            <div class="sched-slot-row vol-slot {% if vol.id == my_id %}is-mine{% endif %}"
+                 data-user-id="{{ vol.id }}">
+              <span class="slot-name {% if vol.id == my_id %}fw-bold text-primary{% endif %}">
+                {{- vol.name -}}
+              </span>
+              {% if vol.id == my_id and d >= today %}
+                <button type="button"
+                        class="btn btn-link btn-sm p-0 ms-1 lh-1 text-danger btn-remove-self"
+                        data-date="{{ d.isoformat() }}"
+                        data-shift-type="{{ shift_type }}"
+                        data-user-id="{{ vol.id }}"
+                        data-user-name="{{ vol.name }}"
+                        title="Remove me">
+                  <i class="bi bi-dash-circle"></i>
+                </button>
+              {% endif %}
+            </div>
           {% endfor %}
+
+          {% if show_add %}
+            <div class="sched-slot-row vol-slot vol-empty" data-user-id="">
+              <button type="button"
+                      class="btn btn-outline-success btn-sm sched-add-btn btn-add-self"
+                      data-date="{{ d.isoformat() }}"
+                      data-shift-type="{{ shift_type }}"
+                      data-user-id="{{ my_id }}"
+                      data-user-name="{{ my_name }}">
+                <i class="bi bi-plus-circle"></i> Add to shift
+              </button>
+            </div>
+          {% endif %}
 
           {% endif %}{# end admin/volunteer branch #}
         </td>
@@ -303,12 +293,6 @@ function doAdd(btn) {
   slot.dataset.userId = uid;
   slot.innerHTML = mineHTML(date, st, uid, uname);
   attachVolListeners(slot);
-  // Hide other + buttons in this cell
-  btn.closest('td').querySelectorAll('.btn-add-self').forEach(b => {
-    const s = b.closest('.vol-slot');
-    s.innerHTML = '<span class="text-muted" style="font-size:.7rem;">—</span>';
-    s.classList.remove('vol-empty');
-  });
   updateSaveBar();
 }
 
@@ -350,12 +334,8 @@ function doUndo(btn) {
   slot.classList.remove('pending-remove');
   slot.innerHTML = mineHTML(date, st, uid, uname);
   attachVolListeners(slot);
-  // Remove any + button that was shown in an empty slot for this shift
-  const cell = slot.closest('td');
-  cell.querySelectorAll('.vol-slot.vol-empty .btn-add-self').forEach(b => {
-    const s = b.closest('.vol-slot');
-    s.innerHTML = '<span class="text-muted" style="font-size:.7rem;">—</span>';
-  });
+  // If an add button was inserted, remove it
+  slot.closest('td').querySelectorAll('.vol-slot.vol-empty').forEach(s => s.remove());
   updateSaveBar();
 }
 
@@ -367,9 +347,9 @@ function mineHTML(date, st, uid, uname) {
 }
 
 function addBtnHTML(date, st, uid, uname) {
-  return `<button type="button" class="btn btn-link btn-sm p-0 lh-1 text-success btn-add-self"
-    data-date="${date}" data-shift-type="${st}" data-user-id="${uid}" data-user-name="${uname}"
-    title="Add me"><i class="bi bi-plus-circle"></i></button>`;
+  return `<button type="button" class="btn btn-outline-success btn-sm sched-add-btn btn-add-self"
+    data-date="${date}" data-shift-type="${st}" data-user-id="${uid}" data-user-name="${uname}">
+    <i class="bi bi-plus-circle"></i> Add to shift</button>`;
 }
 
 function undoHTML(date, st, uid, uname) {

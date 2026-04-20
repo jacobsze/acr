@@ -37,15 +37,21 @@
       <ul class="navbar-nav mx-auto acr-nav-center">
         {% if current_user %}
           <li class="nav-item">
-            <a class="nav-link acr-main-nav {% if request.endpoint and request.endpoint.startswith('schedule') %}active{% endif %}"
-               href="{{ url_for('schedule.index') }}">
-              <i class="bi bi-calendar3"></i> Upcoming
+            <a class="nav-link acr-main-nav {% if request.endpoint == 'schedule.home' %}active{% endif %}"
+               href="{{ url_for('schedule.home') }}">
+              <i class="bi bi-house"></i> Home
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link acr-main-nav {% if request.endpoint == 'schedule.week_view' %}active{% endif %}"
+               href="{{ url_for('schedule.week_view', week_start=current_week_start.isoformat()) }}">
+              <i class="bi bi-calendar3"></i> Upcoming Schedule
             </a>
           </li>
           <li class="nav-item">
             <a class="nav-link acr-main-nav {% if request.endpoint == 'admin.regular_schedule' %}active{% endif %}"
                href="{{ url_for('admin.regular_schedule') }}">
-              <i class="bi bi-arrow-repeat"></i> Regular Schedule
+              <i class="bi bi-calendar-week"></i> Regular Schedule
             </a>
           </li>
           <li class="nav-item">

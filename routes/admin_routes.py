@@ -73,6 +73,8 @@ def volunteers():
         .order_by(User.name)
         .all()
     )
+    # Current user first, rest alphabetical
+    all_users.sort(key=lambda u: (0 if u.id == g.user.id else 1, u.name))
 
     regular_counts = dict(
         db.session.query(RegularSchedule.user_id, func.count(RegularSchedule.id))

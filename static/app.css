@@ -263,10 +263,6 @@ body {
 .regular-sched-table {
   font-size: .85rem;
 }
-.regular-day-col {
-  width: 52px;
-  font-size: .85rem;
-}
 .regular-sched-table td {
   padding: 8px 12px;
 }
@@ -281,6 +277,60 @@ body {
 }
 .ts-wrapper.regular-slot-select .ts-dropdown .option {
   padding: 3px 8px;
+}
+
+/* ── Home page ──────────────────────────────────────────────────────────── */
+.home-wrap {
+  max-width: 520px;
+  margin: 0 auto;
+}
+.home-am-badge {
+  background: #b8cedd;
+  color: #333;
+}
+.home-pm-badge {
+  background: #b8d8b8;
+  color: #333;
+}
+
+/* ── Upcoming schedule: day row separation ──────────────────────────────── */
+.sched-table tbody tr {
+  border-top: 2px solid #bbb;
+}
+.sched-slot-row + .sched-slot-row {
+  border-top: 1px dashed rgba(0,0,0,.08);
+}
+.sched-add-btn {
+  font-size: .78rem;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+/* ── Regular schedule: rotated DOW label ────────────────────────────────── */
+.regular-day-col {
+  width: 30px;
+  padding: 4px 2px;
+  text-align: center;
+  vertical-align: middle;
+}
+.regular-dow-label {
+  display: inline-block;
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+  font-weight: 600;
+  font-size: .82rem;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+
+/* ── Volunteers page ────────────────────────────────────────────────────── */
+.vol-page-header {
+  max-width: 92%;
+  margin: 0 auto;
+}
+.vol-page-wrap {
+  max-width: 92%;
+  margin: 0 auto;
 }
 
 /* ── Admin dashboard stat cards ─────────────────────────────────────────── */
@@ -336,5 +386,14 @@ body {
   /* Full-width schedule on mobile — remove desktop centering cap */
   .sched-mobile-full {
     max-width: 100% !important;
+  }
+  /* Volunteers: near-full width with small margin */
+  .vol-page-header,
+  .vol-page-wrap {
+    max-width: calc(100% - 10px) !important;
+  }
+  /* Home page full-width on mobile */
+  .home-wrap {
+    max-width: 100%;
   }
 }
