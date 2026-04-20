@@ -346,6 +346,18 @@ def change_log():
 
 # ── Email log ─────────────────────────────────────────────────────────────────
 
+@admin_bp.route("/email-log/check", methods=["POST"])
+@admin_required
+def check_email_now():
+    try:
+        from services.gmail_monitor import check_and_process
+        check_and_process(current_app._get_current_object())
+        flash("Email check complete.", "success")
+    except Exception as exc:
+        flash(f"Email check failed: {exc}", "error")
+    return redirect(url_for("admin.email_log"))
+
+
 @admin_bp.route("/email-log")
 @admin_required
 def email_log():
