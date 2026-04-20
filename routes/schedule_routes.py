@@ -259,7 +259,7 @@ def week_view(week_start: str):
         day_names=DAY_NAMES,
         prev_week=(ws - timedelta(weeks=1)).isoformat(),
         next_week=(ws + timedelta(weeks=1)).isoformat(),
-        current_week_start=get_week_start(today).isoformat(),
+        current_week_start=get_week_start(today),
         all_volunteers=all_volunteers,
         all_active_users=all_active_users,
         today=today,
