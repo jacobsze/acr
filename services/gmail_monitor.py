@@ -60,10 +60,11 @@ def _get_service(app):
 
 
 def _extract_content(msg: dict) -> dict:
-    """Pull subject, sender, and plain-text body out of a Gmail message object."""
+    """Pull subject, sender, plain-text body, Message-ID, and thread ID out of a Gmail message."""
     headers = {h["name"]: h["value"] for h in msg["payload"]["headers"]}
     subject = headers.get("Subject", "")
     from_raw = headers.get("From", "")
+    message_id = headers.get("Message-ID", "")
 
     if "<" in from_raw and ">" in from_raw:
         from_email = from_raw.split("<")[1].split(">")[0].strip()
@@ -85,7 +86,13 @@ def _extract_content(msg: dict) -> dict:
         if data:
             body = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
 
-    return {"subject": subject, "from_email": from_email, "body": body}
+    return {
+        "subject": subject,
+        "from_email": from_email,
+        "body": body,
+        "message_id": message_id,
+        "thread_id": msg.get("threadId", ""),
+    }
 
 
 def _apply_parsed(app, parsed, content, sender_email=None):
@@ -216,25 +223,18 @@ def _apply_parsed(app, parsed, content, sender_email=None):
 
 
 def _send_summary_email(app, service, content, parsed, results, processing_error=None):
-    """Send a plain-text summary of what happened to the owner email."""
+    """Reply to the original email thread with a processing summary for the owner."""
     owner_email = app.config.get("OWNER_EMAIL", "")
     monitor_email = app.config.get("GMAIL_MONITOR_EMAIL", "")
     if not owner_email:
         return
 
-    lines = [
-        f"From:    {content.get('from_email', '?')}",
-        f"Subject: {content.get('subject', '?')}",
-        "",
-        "--- Results ---",
-        "",
-    ]
-
+    lines = []
     if processing_error:
         lines.append(f"ERROR during processing: {processing_error}")
     elif not results and parsed.get("action") in (None, "unknown"):
         reason = parsed.get("reason", "No schedule change detected.")
-        lines.append(f"No schedule action found.")
+        lines.append("No schedule action found.")
         lines.append(f"Claude's interpretation: {reason}")
     elif not results:
         lines.append("No changes applied.")
@@ -253,14 +253,26 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
 
     body = "\n".join(lines)
     original_subject = content.get("subject", "")
+    reply_subject = original_subject if original_subject.lower().startswith("re:") else f"Re: {original_subject}"
+
     msg = MIMEText(body)
     msg["to"] = owner_email
     msg["from"] = monitor_email
-    msg["subject"] = f"[ACR Schedule] {original_subject}"
+    msg["subject"] = reply_subject
+
+    original_message_id = content.get("message_id", "")
+    if original_message_id:
+        msg["In-Reply-To"] = original_message_id
+        msg["References"] = original_message_id
 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    send_body = {"raw": raw}
+    thread_id = content.get("thread_id", "")
+    if thread_id:
+        send_body["threadId"] = thread_id
+
     try:
-        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        service.users().messages().send(userId="me", body=send_body).execute()
     except Exception as exc:
         app.logger.error("Gmail monitor: failed to send summary email – %s", exc)
 
