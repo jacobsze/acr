@@ -113,8 +113,7 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
 @login_required
 def home():
     today = date.today()
-    end = today + timedelta(days=13)
-    cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
+    end = today + timedelta(days=27)
 
     all_assignments = (
         ShiftAssignment.query
@@ -132,25 +131,22 @@ def home():
         regular_by_dow.setdefault((rs.day_of_week, rs.shift_type), []).append(rs.user)
 
     days = []
-    for i in range(14):
+    for i in range(28):
         d = today + timedelta(days=i)
-        day_shifts = []
+        my_shifts = []
         for st in ["AM", "PM"]:
             key = (d, st)
             if key in shift_map:
                 vols = sorted(shift_map[key], key=lambda u: u.name)
             else:
                 vols = sorted(regular_by_dow.get((d.weekday(), st), []), key=lambda u: u.name)
-            user_assigned = any(v.id == g.user.id for v in vols)
-            day_shifts.append({
-                "shift_type": st,
-                "volunteers": vols,
-                "others": [v for v in vols if v.id != g.user.id],
-                "user_assigned": user_assigned,
-                "count": len(vols),
-                "is_full": len(vols) >= cap,
-            })
-        days.append({"date": d, "shifts": day_shifts})
+            if any(v.id == g.user.id for v in vols):
+                my_shifts.append({
+                    "shift_type": st,
+                    "others": [v for v in vols if v.id != g.user.id],
+                })
+        if my_shifts:
+            days.append({"date": d, "shifts": my_shifts})
 
     return render_template("home.html", days=days, today=today)
 
