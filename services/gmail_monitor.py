@@ -97,8 +97,8 @@ def check_and_process(app) -> None:
             app.logger.error("Gmail monitor: cannot get service – %s", exc)
             return
 
-        group_email = app.config["GMAIL_MONITOR_EMAIL"]
-        query = f"to:{group_email} OR from:{group_email}"
+        inbox_email = app.config["GMAIL_MONITOR_EMAIL"]
+        query = f"to:{inbox_email}"
 
         try:
             result = (
@@ -113,6 +113,7 @@ def check_and_process(app) -> None:
 
         messages = result.get("messages", [])
         volunteers = User.query.filter_by(active=True).all()
+        volunteer_emails = {v.email.lower() for v in volunteers}
 
         for meta in messages:
             msg_id = meta["id"]
@@ -134,79 +135,83 @@ def check_and_process(app) -> None:
                 )
                 content = _extract_content(msg)
 
-                parsed = parse_email_schedule_request(
-                    email_subject=content["subject"],
-                    email_body=content["body"],
-                    email_from=content["from_email"],
-                    volunteers=volunteers,
-                )
+                if content["from_email"].lower() not in volunteer_emails:
+                    app.logger.info(
+                        "Gmail monitor: skipping msg %s – sender %s not a volunteer",
+                        msg_id, content["from_email"],
+                    )
+                else:
+                    parsed = parse_email_schedule_request(
+                        email_subject=content["subject"],
+                        email_body=content["body"],
+                        email_from=content["from_email"],
+                        volunteers=volunteers,
+                    )
 
-                action = parsed.get("action")
-                confidence = parsed.get("confidence", "low")
+                    action = parsed.get("action")
+                    confidence = parsed.get("confidence", "low")
 
-                if action in ("add", "remove") and confidence in ("high", "medium"):
-                    vol_email = parsed.get("volunteer_email")
-                    date_str = parsed.get("date")
-                    shift_type = parsed.get("shift_type")
+                    if action in ("add", "remove") and confidence in ("high", "medium"):
+                        vol_email = parsed.get("volunteer_email")
+                        date_str = parsed.get("date")
+                        shift_type = parsed.get("shift_type")
 
-                    if vol_email and date_str and shift_type:
-                        target_user = User.query.filter_by(
-                            email=vol_email, active=True
-                        ).first()
-                        target_date = date.fromisoformat(date_str)
+                        if vol_email and date_str and shift_type:
+                            target_user = User.query.filter_by(
+                                email=vol_email, active=True
+                            ).first()
+                            target_date = date.fromisoformat(date_str)
 
-                        if target_user:
-                            materialize_if_needed(target_date, shift_type)
+                            if target_user:
+                                materialize_if_needed(target_date, shift_type)
 
-                            if action == "add":
-                                existing = ShiftAssignment.query.filter_by(
-                                    date=target_date,
-                                    shift_type=shift_type,
-                                    user_id=target_user.id,
-                                ).first()
-                                count = ShiftAssignment.query.filter_by(
-                                    date=target_date, shift_type=shift_type
-                                ).count()
-                                cap = app.config["MAX_VOLUNTEERS_PER_SHIFT"]
+                                if action == "add":
+                                    existing = ShiftAssignment.query.filter_by(
+                                        date=target_date,
+                                        shift_type=shift_type,
+                                        user_id=target_user.id,
+                                    ).first()
+                                    count = ShiftAssignment.query.filter_by(
+                                        date=target_date, shift_type=shift_type
+                                    ).count()
+                                    cap = app.config["MAX_VOLUNTEERS_PER_SHIFT"]
 
-                                if not existing and count < cap:
-                                    db.session.add(
-                                        ShiftAssignment(
+                                    if not existing and count < cap:
+                                        db.session.add(ShiftAssignment(
                                             date=target_date,
                                             shift_type=shift_type,
                                             user_id=target_user.id,
                                             notes=f"Added via email: {content['subject']}",
-                                        )
-                                    )
-                                    db.session.add(ScheduleChangeLog(
-                                        log_type="upcoming",
-                                        date=target_date,
-                                        shift_type=shift_type,
-                                        action="add",
-                                        volunteer_id=target_user.id,
-                                        volunteer_name=target_user.name,
-                                    ))
-                                    db.session.commit()
-                                    status = "success"
+                                        ))
+                                        db.session.add(ScheduleChangeLog(
+                                            log_type="upcoming",
+                                            date=target_date,
+                                            shift_type=shift_type,
+                                            action="add",
+                                            volunteer_id=target_user.id,
+                                            volunteer_name=target_user.name,
+                                        ))
+                                        db.session.commit()
+                                        status = "success"
 
-                            elif action == "remove":
-                                existing = ShiftAssignment.query.filter_by(
-                                    date=target_date,
-                                    shift_type=shift_type,
-                                    user_id=target_user.id,
-                                ).first()
-                                if existing:
-                                    db.session.delete(existing)
-                                    db.session.add(ScheduleChangeLog(
-                                        log_type="upcoming",
+                                elif action == "remove":
+                                    existing = ShiftAssignment.query.filter_by(
                                         date=target_date,
                                         shift_type=shift_type,
-                                        action="remove",
-                                        volunteer_id=target_user.id,
-                                        volunteer_name=target_user.name,
-                                    ))
-                                    db.session.commit()
-                                    status = "success"
+                                        user_id=target_user.id,
+                                    ).first()
+                                    if existing:
+                                        db.session.delete(existing)
+                                        db.session.add(ScheduleChangeLog(
+                                            log_type="upcoming",
+                                            date=target_date,
+                                            shift_type=shift_type,
+                                            action="remove",
+                                            volunteer_id=target_user.id,
+                                            volunteer_name=target_user.name,
+                                        ))
+                                        db.session.commit()
+                                        status = "success"
 
             except Exception as exc:
                 app.logger.error("Gmail monitor: error on msg %s – %s", msg_id, exc)

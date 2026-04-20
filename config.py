@@ -41,7 +41,7 @@ class Config:
     # Gmail API (for monitoring the Google Group inbox)
     GMAIL_CREDENTIALS_FILE = os.environ.get("GMAIL_CREDENTIALS_FILE", "credentials.json")
     GMAIL_TOKEN_FILE = os.environ.get("GMAIL_TOKEN_FILE", "token.json")
-    GMAIL_MONITOR_EMAIL = os.environ.get("GMAIL_MONITOR_EMAIL", "acrpetco86@googlegroups.com")
+    GMAIL_MONITOR_EMAIL = os.environ.get("GMAIL_MONITOR_EMAIL", "acr86.schedule@gmail.com")
     GMAIL_CHECK_INTERVAL_MINUTES = int(os.environ.get("GMAIL_CHECK_INTERVAL_MINUTES", "5"))
 
     # Business rules
