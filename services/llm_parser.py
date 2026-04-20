@@ -8,6 +8,31 @@ from datetime import date
 from flask import current_app
 
 
+DEFAULT_INSTRUCTIONS = """\
+Determine:
+1. Is this a schedule change request?
+2. Which volunteer is making the request? Match their name or email to the list above.
+3. What action: "add" (they want to pick up a shift) or "remove" (they want to drop a shift)?
+4. What date? Convert relative expressions ("this Saturday", "next Tuesday") to YYYY-MM-DD.\
+ If only a day of week is given with no specific date, assume the next upcoming occurrence of that day.
+5. Which shift: AM or PM?
+
+If this is not a schedule request, set action to "unknown".\
+"""
+
+
+def get_instructions() -> str:
+    """Load custom instructions from DB, falling back to the default."""
+    try:
+        from models import AppSetting
+        setting = AppSetting.query.get("llm_instructions")
+        if setting and setting.value.strip():
+            return setting.value
+    except Exception:
+        pass
+    return DEFAULT_INSTRUCTIONS
+
+
 def parse_email_schedule_request(
     email_subject: str,
     email_body: str,
@@ -46,6 +71,7 @@ def parse_email_schedule_request(
         today = date.today()
 
     volunteer_list = "\n".join(f"- {v.name} ({v.email})" for v in volunteers)
+    instructions = get_instructions()
 
     prompt = f"""\
 You are an assistant helping manage the volunteer shift schedule for a cat rescue shelter.
@@ -66,12 +92,7 @@ Body:
 
 ---
 
-Determine:
-1. Is this a schedule change request?
-2. Which volunteer is making the request? Match their name or email to the list above.
-3. What action: "add" (they want to pick up a shift) or "remove" (they want to drop a shift)?
-4. What date? Convert relative expressions ("this Saturday", "next Tuesday") to YYYY-MM-DD.
-5. Which shift: AM or PM?
+{instructions}
 
 Respond with ONLY a JSON object — no markdown, no extra text:
 {{
@@ -81,9 +102,7 @@ Respond with ONLY a JSON object — no markdown, no extra text:
   "shift_type": "AM" | "PM" | null,
   "confidence": "high" | "medium" | "low",
   "reason": "one-sentence explanation"
-}}
-
-If this is not a schedule request, set action to "unknown"."""
+}}"""
 
     try:
         import anthropic

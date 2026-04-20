@@ -86,6 +86,10 @@
                          href="{{ url_for('admin.manage_admins') }}">
                     <i class="bi bi-shield-lock"></i> Manage Admins
                   </a></li>
+                  <li><a class="dropdown-item {% if request.endpoint == 'admin.ai_settings' %}active{% endif %}"
+                         href="{{ url_for('admin.ai_settings') }}">
+                    <i class="bi bi-robot"></i> AI Settings
+                  </a></li>
                 {% endif %}
                 <li><hr class="dropdown-divider"></li>
               {% endif %}

@@ -96,6 +96,16 @@ class ScheduleChangeLog(db.Model):
     volunteer = db.relationship("User", foreign_keys=[volunteer_id])
 
 
+class AppSetting(db.Model):
+    """Generic key/value store for admin-editable app settings."""
+
+    __tablename__ = "app_settings"
+
+    key = db.Column(db.String(100), primary_key=True)
+    value = db.Column(db.Text, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
 class EmailProcessingLog(db.Model):
     """Audit trail for emails processed from the Google Group."""
 

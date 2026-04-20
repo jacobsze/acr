@@ -6,7 +6,7 @@ from flask import (
 )
 from sqlalchemy import func
 
-from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog
+from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog, AppSetting
 from auth_utils import login_required, admin_required, owner_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -368,3 +368,30 @@ def email_log():
         .all()
     )
     return render_template("admin_email_log.html", logs=logs)
+
+
+# ── AI Settings ───────────────────────────────────────────────────────────────
+
+@admin_bp.route("/settings", methods=["GET", "POST"])
+@owner_required
+def ai_settings():
+    from services.llm_parser import DEFAULT_INSTRUCTIONS
+
+    if request.method == "POST":
+        new_value = request.form.get("llm_instructions", "").strip()
+        setting = AppSetting.query.get("llm_instructions")
+        if setting:
+            setting.value = new_value
+        else:
+            db.session.add(AppSetting(key="llm_instructions", value=new_value))
+        db.session.commit()
+        flash("AI instructions saved.", "success")
+        return redirect(url_for("admin.ai_settings"))
+
+    setting = AppSetting.query.get("llm_instructions")
+    current_value = setting.value if setting else DEFAULT_INSTRUCTIONS
+    return render_template(
+        "admin_settings.html",
+        current_value=current_value,
+        default_value=DEFAULT_INSTRUCTIONS,
+    )

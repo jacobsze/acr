@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}AI Settings – Petco86 Volunteer Schedule{% endblock %}
+
+{% block content %}
+<div class="mt-3 mb-3" style="max-width:800px; margin:0 auto;">
+  <h4><i class="bi bi-robot"></i> AI Email Parser Settings</h4>
+  <p class="text-muted small mb-4">
+    These instructions tell Claude how to interpret incoming volunteer emails.
+    The AI will always be given today's date, the list of registered volunteers,
+    and the full email content — you only need to describe what to do with them.
+  </p>
+
+  <form method="post">
+    <div class="mb-3">
+      <label for="llm_instructions" class="form-label fw-semibold">Instructions for Claude</label>
+      <textarea class="form-control font-monospace"
+                id="llm_instructions"
+                name="llm_instructions"
+                rows="14"
+                style="font-size:.85rem;">{{ current_value }}</textarea>
+      <div class="form-text">
+        Tip: be explicit about how to handle ambiguous dates (e.g. "next Tuesday" vs just "Tuesday").
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn acr-btn-primary btn-sm">
+        <i class="bi bi-floppy"></i> Save
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              onclick="document.getElementById('llm_instructions').value = {{ default_value | tojson }}">
+        <i class="bi bi-arrow-counterclockwise"></i> Reset to default
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
