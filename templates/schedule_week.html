@@ -131,7 +131,7 @@
                       data-shift-type="{{ shift_type }}"
                       data-user-id="{{ my_id }}"
                       data-user-name="{{ my_name }}">
-                <i class="bi bi-plus-circle"></i> Add to shift
+                <i class="bi bi-plus-circle"></i> Sign up
               </button>
             </div>
           {% endif %}
@@ -349,7 +349,7 @@ function mineHTML(date, st, uid, uname) {
 function addBtnHTML(date, st, uid, uname) {
   return `<button type="button" class="btn btn-outline-success btn-sm sched-add-btn btn-add-self"
     data-date="${date}" data-shift-type="${st}" data-user-id="${uid}" data-user-name="${uname}">
-    <i class="bi bi-plus-circle"></i> Add to shift</button>`;
+    <i class="bi bi-plus-circle"></i> Sign up</button>`;
 }
 
 function undoHTML(date, st, uid, uname) {

@@ -57,7 +57,11 @@ def _resolve_clerk_user() -> User | None:
         if not email_objs:
             return None
 
-        email = email_objs[0].email_address.strip().lower()
+        raw_email = getattr(email_objs[0], "email_address", None) or getattr(email_objs[0], "email", "")
+        email = raw_email.strip().lower()
+        if not email:
+            return None
+
         user = User.query.filter_by(email=email, active=True).first()
         if user:
             user.clerk_user_id = clerk_user_id
@@ -75,6 +79,7 @@ def _resolve_clerk_user() -> User | None:
 
     except Exception as exc:
         current_app.logger.warning("Clerk auth error: %s", exc)
+        g._clerk_lookup_error = True
         return None
 
 
@@ -95,6 +100,9 @@ def _redirect_login():
             sdk = Clerk(bearer_auth=secret_key)
             state = sdk.authenticate_request(request, AuthenticateRequestOptions())
             if state.is_signed_in:
+                # Only show "not registered" if we're certain there's no lookup error
+                if getattr(g, "_clerk_lookup_error", False):
+                    return redirect(url_for("auth.login"))
                 return redirect(url_for("auth.not_registered"))
         except Exception:
             pass
