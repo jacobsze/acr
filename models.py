@@ -94,6 +94,7 @@ class ScheduleChangeLog(db.Model):
 
     changed_by = db.relationship("User", foreign_keys=[changed_by_id])
     volunteer = db.relationship("User", foreign_keys=[volunteer_id])
+    changed_by_note = db.Column(db.String(200), nullable=True)  # free-text for non-user changes (e.g. email/LLM)
 
 
 class AppSetting(db.Model):

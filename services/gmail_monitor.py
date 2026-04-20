@@ -88,7 +88,7 @@ def _extract_content(msg: dict) -> dict:
     return {"subject": subject, "from_email": from_email, "body": body}
 
 
-def _apply_parsed(app, parsed, content):
+def _apply_parsed(app, parsed, content, sender_email=None):
     """
     Try to apply an add/remove action from a parsed result.
     Returns a list of result dicts, one per attempted date, each with:
@@ -137,6 +137,7 @@ def _apply_parsed(app, parsed, content):
     today = date.today()
     results = []
     any_success = False
+    changed_by_note = f"Email from {sender_email}" if sender_email else "Email (LLM)"
 
     for date_str in date_strs:
         target_date = date.fromisoformat(date_str)
@@ -181,6 +182,7 @@ def _apply_parsed(app, parsed, content):
             db.session.add(ScheduleChangeLog(
                 log_type="upcoming", date=target_date, shift_type=shift_type,
                 action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
+                changed_by_note=changed_by_note,
             ))
             r["status"] = "success"
             r["message"] = f"Added {target_user.name} to {shift_type} on {date_str}."
@@ -199,6 +201,7 @@ def _apply_parsed(app, parsed, content):
             db.session.add(ScheduleChangeLog(
                 log_type="upcoming", date=target_date, shift_type=shift_type,
                 action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
+                changed_by_note=changed_by_note,
             ))
             r["status"] = "success"
             r["message"] = f"Removed {target_user.name} from {shift_type} on {date_str}."
@@ -304,7 +307,7 @@ def _process_one(app, service, msg_id, volunteers):
                 status = "failed"
                 error_msg = parsed.get("error")
             else:
-                results = _apply_parsed(app, parsed, content)
+                results = _apply_parsed(app, parsed, content, sender_email=content["from_email"])
                 status = "success" if any(r["status"] == "success" for r in results) else "no_action"
                 if results or parsed.get("action") in (None, "unknown"):
                     _send_summary_email(app, service, content, parsed, results)

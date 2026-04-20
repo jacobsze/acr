@@ -51,7 +51,15 @@
           <td class="text-success">
             {% if log.action == 'add' %}{{ log.volunteer_name }}{% else %}—{% endif %}
           </td>
-          <td>{{ log.changed_by.name if log.changed_by else '—' }}</td>
+          <td>
+            {% if log.changed_by %}
+              {{ log.changed_by.name }}
+            {% elif log.changed_by_note %}
+              <span class="text-muted"><i class="bi bi-robot"></i> {{ log.changed_by_note }}</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
         </tr>
         {% else %}
         <tr><td colspan="8" class="text-center text-muted py-4">No changes logged yet.</td></tr>
