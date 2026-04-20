@@ -6,7 +6,7 @@ from flask import (
 )
 from sqlalchemy import func
 
-from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog
+from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog
 from auth_utils import login_required, admin_required, owner_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -265,13 +265,27 @@ def save_regular_schedule():
         for rs in RegularSchedule.query.all()
     }
 
+    user_map = {u.id: u.name for u in User.query.all()}
+
     for key, rs in current.items():
         if key not in new_set:
             db.session.delete(rs)
+            db.session.add(ScheduleChangeLog(
+                log_type="regular", day_of_week=key[1], shift_type=key[2],
+                action="remove", volunteer_id=key[0],
+                volunteer_name=user_map.get(key[0], str(key[0])),
+                changed_by_id=g.user.id,
+            ))
 
     for key in new_set:
         if key not in current:
             db.session.add(RegularSchedule(user_id=key[0], day_of_week=key[1], shift_type=key[2]))
+            db.session.add(ScheduleChangeLog(
+                log_type="regular", day_of_week=key[1], shift_type=key[2],
+                action="add", volunteer_id=key[0],
+                volunteer_name=user_map.get(key[0], str(key[0])),
+                changed_by_id=g.user.id,
+            ))
 
     db.session.commit()
     flash("Regular schedule saved.", "success")
@@ -314,6 +328,20 @@ def revoke_admin():
         db.session.commit()
         flash(f"{user.name} has been revoked admin access.", "success")
     return redirect(url_for("admin.manage_admins"))
+
+
+# ── Change log ────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/change-log")
+@admin_required
+def change_log():
+    logs = (
+        ScheduleChangeLog.query
+        .order_by(ScheduleChangeLog.changed_at.desc())
+        .limit(300)
+        .all()
+    )
+    return render_template("admin_change_log.html", logs=logs)
 
 
 # ── Email log ─────────────────────────────────────────────────────────────────

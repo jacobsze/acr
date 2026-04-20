@@ -6,7 +6,7 @@ from flask import (
     request, url_for, current_app,
 )
 
-from models import db, User, RegularSchedule, ShiftAssignment
+from models import db, User, RegularSchedule, ShiftAssignment, ScheduleChangeLog
 from auth_utils import login_required, get_current_user
 
 schedule_bp = Blueprint("schedule", __name__)
@@ -219,6 +219,13 @@ def bulk_save():
         ).first()
         if assignment:
             db.session.delete(assignment)
+            vol = User.query.get(user_id)
+            db.session.add(ScheduleChangeLog(
+                log_type="upcoming", date=d, shift_type=shift_type,
+                action="remove", volunteer_id=user_id,
+                volunteer_name=vol.name if vol else str(user_id),
+                changed_by_id=g.user.id,
+            ))
             successes += 1
 
     for a in adds:
@@ -247,9 +254,16 @@ def bulk_save():
             errors.append(f"Shift on {d.strftime('%b %-d')} {shift_type} is full.")
             continue
 
+        target = User.query.get(user_id)
         db.session.add(ShiftAssignment(
             date=d, shift_type=shift_type,
             user_id=user_id, created_by_id=g.user.id,
+        ))
+        db.session.add(ScheduleChangeLog(
+            log_type="upcoming", date=d, shift_type=shift_type,
+            action="add", volunteer_id=user_id,
+            volunteer_name=target.name if target else str(user_id),
+            changed_by_id=g.user.id,
         ))
         successes += 1
 

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Change Log – Petco86 Volunteer Schedule{% endblock %}
+
+{% block content %}
+<div class="mt-3 mb-3" style="max-width:900px; margin:0 auto;">
+  <h4><i class="bi bi-clock-history"></i> Schedule Change Log</h4>
+  <p class="text-muted small mb-3">Most recent 300 changes to the Upcoming and Regular schedules.</p>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle vol-table" style="font-size:.85rem;">
+      <thead class="table-light">
+        <tr>
+          <th>When</th>
+          <th>Type</th>
+          <th>Date</th>
+          <th>DOW</th>
+          <th>Shift</th>
+          <th>Original</th>
+          <th>Current</th>
+          <th>Changed By</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set dow_names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+        {% for log in logs %}
+        <tr>
+          <td class="text-nowrap text-muted">
+            {{ log.changed_at.strftime('%b %-d, %Y %-I:%M %p') }}
+          </td>
+          <td>
+            {% if log.log_type == 'upcoming' %}
+              <span class="badge bg-primary">Upcoming</span>
+            {% else %}
+              <span class="badge bg-secondary">Regular</span>
+            {% endif %}
+          </td>
+          <td class="text-nowrap">
+            {% if log.date %}{{ log.date.strftime('%b %-d, %Y') }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if log.date %}
+              {{ log.date.strftime('%a') }}
+            {% elif log.day_of_week is not none %}
+              {{ dow_names[log.day_of_week] }}
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ log.shift_type }}</td>
+          <td class="text-danger">
+            {% if log.action == 'remove' %}{{ log.volunteer_name }}{% else %}—{% endif %}
+          </td>
+          <td class="text-success">
+            {% if log.action == 'add' %}{{ log.volunteer_name }}{% else %}—{% endif %}
+          </td>
+          <td>{{ log.changed_by.name if log.changed_by else '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No changes logged yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

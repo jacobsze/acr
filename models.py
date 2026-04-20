@@ -74,6 +74,28 @@ class ShiftAssignment(db.Model):
     )
 
 
+class ScheduleChangeLog(db.Model):
+    """Audit trail for upcoming and regular schedule changes."""
+
+    __tablename__ = "schedule_change_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    changed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    changed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    log_type = db.Column(db.String(10), nullable=False)   # 'upcoming' | 'regular'
+    date = db.Column(db.Date, nullable=True)               # upcoming only
+    day_of_week = db.Column(db.Integer, nullable=True)     # regular only (0=Mon…6=Sun)
+    shift_type = db.Column(db.String(2), nullable=False)   # AM | PM
+    action = db.Column(db.String(10), nullable=False)      # 'add' | 'remove'
+
+    volunteer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    volunteer_name = db.Column(db.String(100), nullable=True)  # snapshot
+
+    changed_by = db.relationship("User", foreign_keys=[changed_by_id])
+    volunteer = db.relationship("User", foreign_keys=[volunteer_id])
+
+
 class EmailProcessingLog(db.Model):
     """Audit trail for emails processed from the Google Group."""
 

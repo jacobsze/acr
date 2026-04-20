@@ -73,6 +73,10 @@
                        href="{{ url_for('admin.dashboard') }}">
                   <i class="bi bi-speedometer2"></i> Dashboard
                 </a></li>
+                <li><a class="dropdown-item {% if request.endpoint == 'admin.change_log' %}active{% endif %}"
+                       href="{{ url_for('admin.change_log') }}">
+                  <i class="bi bi-clock-history"></i> Change Log
+                </a></li>
                 <li><a class="dropdown-item {% if request.endpoint == 'admin.email_log' %}active{% endif %}"
                        href="{{ url_for('admin.email_log') }}">
                   <i class="bi bi-envelope-open"></i> Email Log
