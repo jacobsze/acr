@@ -7,16 +7,24 @@ Setup:
 2. Create OAuth 2.0 credentials (Desktop app) and download credentials.json.
 3. Set GMAIL_CREDENTIALS_FILE and GMAIL_TOKEN_FILE in .env.
 4. On first run, a browser window will open to authorise access and write token.json.
+
+Note: SCOPES now includes gmail.send so the app can email the owner with results.
+If you previously authorised with the read-only scope, delete token.json and
+re-run the local OAuth flow to get a new token with the updated scopes.
 """
 import base64
 import json
 import os
 from datetime import date
+from email.mime.text import MIMEText
 
 from flask import current_app
 
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+]
 
 
 def _get_service(app):
@@ -57,7 +65,6 @@ def _extract_content(msg: dict) -> dict:
     subject = headers.get("Subject", "")
     from_raw = headers.get("From", "")
 
-    # "Display Name <addr@example.com>" → "addr@example.com"
     if "<" in from_raw and ">" in from_raw:
         from_email = from_raw.split("<")[1].split(">")[0].strip()
     else:
@@ -84,72 +91,175 @@ def _extract_content(msg: dict) -> dict:
 def _apply_parsed(app, parsed, content):
     """
     Try to apply an add/remove action from a parsed result.
-    Handles date being a single string or a list of strings.
-    Returns 'success' if at least one change was applied, else 'no_action'.
+    Returns a list of result dicts, one per attempted date, each with:
+      date, shift_type, action, volunteer_name, status, message
+    Possible statuses: success, skipped_past, already_assigned, not_found,
+                       at_capacity, low_confidence, unknown_action
     """
     from models import db, User, ShiftAssignment, ScheduleChangeLog
     from routes.schedule_routes import materialize_if_needed
 
     action = parsed.get("action")
     confidence = parsed.get("confidence", "low")
-
-    if action not in ("add", "remove") or confidence not in ("high", "medium"):
-        return "no_action"
-
     vol_email = parsed.get("volunteer_email")
     date_val = parsed.get("date")
     shift_type = parsed.get("shift_type")
 
+    if action not in ("add", "remove"):
+        return []
+
+    if confidence not in ("high", "medium"):
+        return [{
+            "date": date_val,
+            "shift_type": shift_type,
+            "action": action,
+            "volunteer_name": vol_email,
+            "status": "low_confidence",
+            "message": f"Confidence too low ({confidence}) to apply automatically.",
+        }]
+
     if not (vol_email and date_val and shift_type):
-        return "no_action"
+        return []
 
     target_user = User.query.filter_by(email=vol_email, active=True).first()
     if not target_user:
-        return "no_action"
+        return [{
+            "date": date_val,
+            "shift_type": shift_type,
+            "action": action,
+            "volunteer_name": vol_email,
+            "status": "not_found",
+            "message": f"No active volunteer found with email {vol_email}.",
+        }]
 
-    # Claude may return a single date string or a list of date strings
     date_strs = date_val if isinstance(date_val, list) else [date_val]
     cap = app.config["MAX_VOLUNTEERS_PER_SHIFT"]
+    today = date.today()
+    results = []
     any_success = False
 
     for date_str in date_strs:
         target_date = date.fromisoformat(date_str)
+        r = {
+            "date": date_str,
+            "shift_type": shift_type,
+            "action": action,
+            "volunteer_name": target_user.name,
+            "status": None,
+            "message": None,
+        }
+
+        if target_date < today:
+            r["status"] = "skipped_past"
+            r["message"] = f"{date_str} is in the past — skipped."
+            results.append(r)
+            continue
+
         materialize_if_needed(target_date, shift_type)
 
         if action == "add":
             existing = ShiftAssignment.query.filter_by(
                 date=target_date, shift_type=shift_type, user_id=target_user.id,
             ).first()
+            if existing:
+                r["status"] = "already_assigned"
+                r["message"] = f"{target_user.name} is already on {shift_type} on {date_str}."
+                results.append(r)
+                continue
             count = ShiftAssignment.query.filter_by(
                 date=target_date, shift_type=shift_type,
             ).count()
-            if not existing and count < cap:
-                db.session.add(ShiftAssignment(
-                    date=target_date, shift_type=shift_type, user_id=target_user.id,
-                    notes=f"Added via email: {content['subject']}",
-                ))
-                db.session.add(ScheduleChangeLog(
-                    log_type="upcoming", date=target_date, shift_type=shift_type,
-                    action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
-                ))
-                any_success = True
+            if count >= cap:
+                r["status"] = "at_capacity"
+                r["message"] = f"{shift_type} shift on {date_str} is full ({cap}/{cap} volunteers)."
+                results.append(r)
+                continue
+            db.session.add(ShiftAssignment(
+                date=target_date, shift_type=shift_type, user_id=target_user.id,
+                notes=f"Added via email: {content['subject']}",
+            ))
+            db.session.add(ScheduleChangeLog(
+                log_type="upcoming", date=target_date, shift_type=shift_type,
+                action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
+            ))
+            r["status"] = "success"
+            r["message"] = f"Added {target_user.name} to {shift_type} on {date_str}."
+            any_success = True
 
         elif action == "remove":
             existing = ShiftAssignment.query.filter_by(
                 date=target_date, shift_type=shift_type, user_id=target_user.id,
             ).first()
-            if existing:
-                db.session.delete(existing)
-                db.session.add(ScheduleChangeLog(
-                    log_type="upcoming", date=target_date, shift_type=shift_type,
-                    action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
-                ))
-                any_success = True
+            if not existing:
+                r["status"] = "not_found"
+                r["message"] = f"{target_user.name} is not on {shift_type} on {date_str}."
+                results.append(r)
+                continue
+            db.session.delete(existing)
+            db.session.add(ScheduleChangeLog(
+                log_type="upcoming", date=target_date, shift_type=shift_type,
+                action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
+            ))
+            r["status"] = "success"
+            r["message"] = f"Removed {target_user.name} from {shift_type} on {date_str}."
+            any_success = True
+
+        results.append(r)
 
     if any_success:
         db.session.commit()
-        return "success"
-    return "no_action"
+
+    return results
+
+
+def _send_summary_email(app, service, content, parsed, results, processing_error=None):
+    """Send a plain-text summary of what happened to the owner email."""
+    owner_email = app.config.get("OWNER_EMAIL", "")
+    monitor_email = app.config.get("GMAIL_MONITOR_EMAIL", "")
+    if not owner_email:
+        return
+
+    lines = [
+        f"From:    {content.get('from_email', '?')}",
+        f"Subject: {content.get('subject', '?')}",
+        "",
+        "--- Results ---",
+        "",
+    ]
+
+    if processing_error:
+        lines.append(f"ERROR during processing: {processing_error}")
+    elif not results and parsed.get("action") in (None, "unknown"):
+        reason = parsed.get("reason", "No schedule change detected.")
+        lines.append(f"No schedule action found.")
+        lines.append(f"Claude's interpretation: {reason}")
+    elif not results:
+        lines.append("No changes applied.")
+    else:
+        status_icons = {
+            "success": "✅",
+            "skipped_past": "⏭️",
+            "already_assigned": "ℹ️",
+            "not_found": "ℹ️",
+            "at_capacity": "⚠️",
+            "low_confidence": "⚠️",
+        }
+        for r in results:
+            icon = status_icons.get(r["status"], "❓")
+            lines.append(f"{icon} {r['message']}")
+
+    body = "\n".join(lines)
+    original_subject = content.get("subject", "")
+    msg = MIMEText(body)
+    msg["to"] = owner_email
+    msg["from"] = monitor_email
+    msg["subject"] = f"[ACR Schedule] {original_subject}"
+
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    try:
+        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    except Exception as exc:
+        app.logger.error("Gmail monitor: failed to send summary email – %s", exc)
 
 
 def _process_one(app, service, msg_id, volunteers):
@@ -164,6 +274,7 @@ def _process_one(app, service, msg_id, volunteers):
     error_msg = None
     parsed = {}
     content = {"subject": "", "from_email": "", "body": ""}
+    is_volunteer = False
 
     try:
         msg = (
@@ -180,18 +291,30 @@ def _process_one(app, service, msg_id, volunteers):
                 msg_id, content["from_email"],
             )
         else:
+            is_volunteer = True
             parsed = parse_email_schedule_request(
                 email_subject=content["subject"],
                 email_body=content["body"],
                 email_from=content["from_email"],
                 volunteers=volunteers,
             )
-            status = _apply_parsed(app, parsed, content)
+
+            if parsed.get("error") and parsed.get("action") == "unknown":
+                # LLM/API-level error — treat as failed
+                status = "failed"
+                error_msg = parsed.get("error")
+            else:
+                results = _apply_parsed(app, parsed, content)
+                status = "success" if any(r["status"] == "success" for r in results) else "no_action"
+                if results or parsed.get("action") in (None, "unknown"):
+                    _send_summary_email(app, service, content, parsed, results)
 
     except Exception as exc:
         app.logger.error("Gmail monitor: error on msg %s – %s", msg_id, exc)
         status = "failed"
         error_msg = str(exc)
+        if is_volunteer:
+            _send_summary_email(app, service, content, parsed, [], processing_error=str(exc))
 
     return status, error_msg, parsed, content
 
@@ -227,7 +350,7 @@ def check_and_process(app) -> None:
         for meta in result.get("messages", []):
             msg_id = meta["id"]
             if EmailProcessingLog.query.filter_by(gmail_message_id=msg_id).first():
-                continue  # Already processed
+                continue
 
             status, error_msg, parsed, content = _process_one(app, service, msg_id, volunteers)
 
