@@ -374,6 +374,9 @@ def reprocess_email(log_id):
 @admin_required
 def email_log():
     from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    NY = ZoneInfo("America/New_York")
+
     logs = (
         EmailProcessingLog.query
         .order_by(EmailProcessingLog.processed_at.desc())
@@ -385,7 +388,7 @@ def email_log():
     setting = AppSetting.query.get("last_email_check")
     if setting:
         try:
-            last_check = datetime.fromisoformat(setting.value)
+            last_check = datetime.fromisoformat(setting.value).replace(tzinfo=timezone.utc).astimezone(NY)
         except ValueError:
             pass
 
@@ -394,7 +397,7 @@ def email_log():
     if scheduler:
         job = scheduler.get_job("gmail_monitor")
         if job and job.next_run_time:
-            next_check = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
+            next_check = job.next_run_time.astimezone(NY)
 
     return render_template(
         "admin_email_log.html",

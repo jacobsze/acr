@@ -10,13 +10,13 @@
     </p>
     <p class="small mb-0 mt-1">
       {% if last_check %}
-        <span class="text-muted">Last checked: <strong>{{ last_check.strftime('%b %-d %-I:%M %p') }} UTC</strong></span>
+        <span class="text-muted">Last checked: <strong>{{ last_check.strftime('%b %-d %-I:%M %p ET') }}</strong></span>
       {% else %}
         <span class="text-muted">Last checked: <strong>not yet</strong></span>
       {% endif %}
       &nbsp;·&nbsp;
       {% if next_check %}
-        <span class="text-muted">Next check: <strong>{{ next_check.strftime('%b %-d %-I:%M %p') }} UTC</strong></span>
+        <span class="text-muted">Next check: <strong>{{ next_check.strftime('%b %-d %-I:%M %p ET') }}</strong></span>
       {% else %}
         <span class="text-muted">Next check: <strong>scheduler not running</strong></span>
       {% endif %}
