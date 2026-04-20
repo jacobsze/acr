@@ -58,6 +58,11 @@
             {% else %}
               <span class="text-muted">Not a schedule request</span>
             {% endif %}
+            {% if p.reason %}
+              <div class="text-muted" style="font-size:.78rem; margin-top:2px;">
+                <i class="bi bi-chat-quote"></i> {{ p.reason }}
+              </div>
+            {% endif %}
           {% else %}—{% endif %}
         </td>
         <td>
