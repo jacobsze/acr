@@ -237,30 +237,35 @@ def check_and_process(app) -> None:
 
 
 def reprocess_message(app, log_id: int) -> None:
-    """Re-fetch and re-parse a previously logged email, updating the log entry in place."""
+    """Re-fetch and re-parse a previously logged email, updating the log entry in place.
+    Must be called from within an active app/request context (i.e. from a route)."""
+    from datetime import datetime
     from models import db, User, EmailProcessingLog
 
-    with app.app_context():
-        log = EmailProcessingLog.query.get_or_404(log_id)
+    log = db.session.get(EmailProcessingLog, log_id)
+    if log is None:
+        raise ValueError(f"EmailProcessingLog {log_id} not found")
 
-        try:
-            service = _get_service(app)
-        except Exception as exc:
-            log.status = "failed"
-            log.error_message = str(exc)
-            db.session.commit()
-            return
-
-        volunteers = User.query.filter_by(active=True).all()
-        status, error_msg, parsed, content = _process_one(app, service, log.gmail_message_id, volunteers)
-
-        log.status = status
-        log.error_message = error_msg
-        log.parsed_action = json.dumps(parsed) if parsed else None
-        if content.get("from_email"):
-            log.sender_email = content["from_email"]
-        if content.get("subject"):
-            log.subject = content["subject"]
-        if content.get("body"):
-            log.body_snippet = content["body"][:500]
+    try:
+        service = _get_service(app)
+    except Exception as exc:
+        log.status = "failed"
+        log.error_message = str(exc)
+        log.processed_at = datetime.utcnow()
         db.session.commit()
+        return
+
+    volunteers = User.query.filter_by(active=True).all()
+    status, error_msg, parsed, content = _process_one(app, service, log.gmail_message_id, volunteers)
+
+    log.status = status
+    log.error_message = error_msg
+    log.parsed_action = json.dumps(parsed) if parsed else None
+    log.processed_at = datetime.utcnow()
+    if content.get("from_email"):
+        log.sender_email = content["from_email"]
+    if content.get("subject"):
+        log.subject = content["subject"]
+    if content.get("body"):
+        log.body_snippet = content["body"][:500]
+    db.session.commit()
