@@ -86,7 +86,7 @@ def check_and_process(app) -> None:
     Poll for new group emails, parse them with Claude, and apply any
     schedule changes.  Designed to be called from a background scheduler.
     """
-    from models import db, User, ShiftAssignment, EmailProcessingLog
+    from models import db, User, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog
     from routes.schedule_routes import materialize_if_needed
     from services.llm_parser import parse_email_schedule_request
 
@@ -178,6 +178,14 @@ def check_and_process(app) -> None:
                                             notes=f"Added via email: {content['subject']}",
                                         )
                                     )
+                                    db.session.add(ScheduleChangeLog(
+                                        log_type="upcoming",
+                                        date=target_date,
+                                        shift_type=shift_type,
+                                        action="add",
+                                        volunteer_id=target_user.id,
+                                        volunteer_name=target_user.name,
+                                    ))
                                     db.session.commit()
                                     status = "success"
 
@@ -189,6 +197,14 @@ def check_and_process(app) -> None:
                                 ).first()
                                 if existing:
                                     db.session.delete(existing)
+                                    db.session.add(ScheduleChangeLog(
+                                        log_type="upcoming",
+                                        date=target_date,
+                                        shift_type=shift_type,
+                                        action="remove",
+                                        volunteer_id=target_user.id,
+                                        volunteer_name=target_user.name,
+                                    ))
                                     db.session.commit()
                                     status = "success"
 
