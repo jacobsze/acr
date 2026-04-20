@@ -120,7 +120,7 @@ def admin_required(f):
         if not user:
             return _redirect_login()
         if not user.is_admin_or_owner():
-            return redirect(url_for("schedule.index"))
+            return redirect(url_for("schedule.home"))
         g.user = user
         return f(*args, **kwargs)
     return decorated
@@ -133,7 +133,7 @@ def owner_required(f):
         if not user:
             return _redirect_login()
         if user.role != "owner":
-            return redirect(url_for("schedule.index"))
+            return redirect(url_for("schedule.home"))
         g.user = user
         return f(*args, **kwargs)
     return decorated

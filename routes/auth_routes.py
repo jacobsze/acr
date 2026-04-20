@@ -8,7 +8,7 @@ auth_bp = Blueprint("auth", __name__)
 def login():
     """Show Clerk's sign-in widget. Redirects home if already signed in."""
     if get_current_user():
-        return redirect(url_for("schedule.index"))
+        return redirect(url_for("schedule.home"))
     return render_template("login.html")
 
 

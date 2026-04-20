@@ -281,7 +281,7 @@ def bulk_save():
         changes = json.loads(request.form.get("changes_json", "{}"))
     except (json.JSONDecodeError, TypeError):
         flash("Invalid save data.", "error")
-        return redirect(request.referrer or url_for("schedule.index"))
+        return redirect(request.referrer or url_for("schedule.home"))
 
     adds = changes.get("adds", [])
     removes = changes.get("removes", [])
