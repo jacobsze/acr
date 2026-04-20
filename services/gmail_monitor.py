@@ -84,7 +84,8 @@ def _extract_content(msg: dict) -> dict:
 def _apply_parsed(app, parsed, content):
     """
     Try to apply an add/remove action from a parsed result.
-    Returns the resulting status string: 'success' or 'no_action'.
+    Handles date being a single string or a list of strings.
+    Returns 'success' if at least one change was applied, else 'no_action'.
     """
     from models import db, User, ShiftAssignment, ScheduleChangeLog
     from routes.schedule_routes import materialize_if_needed
@@ -96,52 +97,58 @@ def _apply_parsed(app, parsed, content):
         return "no_action"
 
     vol_email = parsed.get("volunteer_email")
-    date_str = parsed.get("date")
+    date_val = parsed.get("date")
     shift_type = parsed.get("shift_type")
 
-    if not (vol_email and date_str and shift_type):
+    if not (vol_email and date_val and shift_type):
         return "no_action"
 
     target_user = User.query.filter_by(email=vol_email, active=True).first()
     if not target_user:
         return "no_action"
 
-    target_date = date.fromisoformat(date_str)
-    materialize_if_needed(target_date, shift_type)
+    # Claude may return a single date string or a list of date strings
+    date_strs = date_val if isinstance(date_val, list) else [date_val]
     cap = app.config["MAX_VOLUNTEERS_PER_SHIFT"]
+    any_success = False
 
-    if action == "add":
-        existing = ShiftAssignment.query.filter_by(
-            date=target_date, shift_type=shift_type, user_id=target_user.id,
-        ).first()
-        count = ShiftAssignment.query.filter_by(
-            date=target_date, shift_type=shift_type,
-        ).count()
-        if not existing and count < cap:
-            db.session.add(ShiftAssignment(
+    for date_str in date_strs:
+        target_date = date.fromisoformat(date_str)
+        materialize_if_needed(target_date, shift_type)
+
+        if action == "add":
+            existing = ShiftAssignment.query.filter_by(
                 date=target_date, shift_type=shift_type, user_id=target_user.id,
-                notes=f"Added via email: {content['subject']}",
-            ))
-            db.session.add(ScheduleChangeLog(
-                log_type="upcoming", date=target_date, shift_type=shift_type,
-                action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
-            ))
-            db.session.commit()
-            return "success"
+            ).first()
+            count = ShiftAssignment.query.filter_by(
+                date=target_date, shift_type=shift_type,
+            ).count()
+            if not existing and count < cap:
+                db.session.add(ShiftAssignment(
+                    date=target_date, shift_type=shift_type, user_id=target_user.id,
+                    notes=f"Added via email: {content['subject']}",
+                ))
+                db.session.add(ScheduleChangeLog(
+                    log_type="upcoming", date=target_date, shift_type=shift_type,
+                    action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
+                ))
+                any_success = True
 
-    elif action == "remove":
-        existing = ShiftAssignment.query.filter_by(
-            date=target_date, shift_type=shift_type, user_id=target_user.id,
-        ).first()
-        if existing:
-            db.session.delete(existing)
-            db.session.add(ScheduleChangeLog(
-                log_type="upcoming", date=target_date, shift_type=shift_type,
-                action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
-            ))
-            db.session.commit()
-            return "success"
+        elif action == "remove":
+            existing = ShiftAssignment.query.filter_by(
+                date=target_date, shift_type=shift_type, user_id=target_user.id,
+            ).first()
+            if existing:
+                db.session.delete(existing)
+                db.session.add(ScheduleChangeLog(
+                    log_type="upcoming", date=target_date, shift_type=shift_type,
+                    action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
+                ))
+                any_success = True
 
+    if any_success:
+        db.session.commit()
+        return "success"
     return "no_action"
 
 

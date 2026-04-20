@@ -72,9 +72,9 @@
         </td>
         <td class="text-nowrap">
           {% if log.error_message %}
-            <span class="text-danger small" title="{{ log.error_message }}">
-              <i class="bi bi-exclamation-triangle"></i> Error
-            </span>
+            <div class="text-danger" style="font-size:.78rem;">
+              <i class="bi bi-exclamation-triangle"></i> {{ log.error_message }}
+            </div>
           {% endif %}
           {% if log.body_snippet %}
             <button class="btn btn-link btn-sm p-0 me-1" type="button"
