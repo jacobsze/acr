@@ -1,9 +1,15 @@
 import os
+import threading
+from datetime import datetime, timezone
 
 from flask import Flask
 
 from config import Config
 from models import db
+
+# Prevents concurrent Gmail checks within a single process
+_gmail_check_running = threading.Event()
+_gmail_check_running.set()   # "set" means idle / not running
 
 
 def create_app(config_class=Config) -> Flask:
@@ -48,10 +54,86 @@ def create_app(config_class=Config) -> Flask:
         except Exception:
             return {}
 
-    # ── Background email monitor ──────────────────────────────────────────
-    _start_email_monitor(app)
+    # ── Gmail lazy-check (fires on requests when overdue) ─────────────────
+    _wire_gmail_check(app)
+
+    # ── 10 am open-shift alert (APScheduler CronTrigger) ─────────────────
+    _start_open_shift_cron(app)
 
     return app
+
+
+def _wire_gmail_check(app: Flask) -> None:
+    """Register a before_request hook that triggers Gmail polling when overdue."""
+    creds_file = app.config.get("GMAIL_CREDENTIALS_FILE", "")
+    if not creds_file or not os.path.exists(creds_file):
+        app.logger.info(
+            "Gmail credentials not found – email monitor disabled. "
+            "Set GMAIL_CREDENTIALS_FILE in .env to enable."
+        )
+        return
+
+    interval = app.config["GMAIL_CHECK_INTERVAL_MINUTES"]
+    app.logger.info("Gmail lazy-check wired (fires on request when >%d min overdue).", interval)
+
+    @app.before_request
+    def _lazy_gmail_check():
+        if not _gmail_check_running.is_set():
+            return  # Already running
+
+        interval_sec = app.config["GMAIL_CHECK_INTERVAL_MINUTES"] * 60
+        from models import AppSetting
+        setting = AppSetting.query.get("last_email_check")
+        if setting:
+            try:
+                last = datetime.fromisoformat(setting.value).replace(tzinfo=timezone.utc)
+                if (datetime.now(timezone.utc) - last).total_seconds() < interval_sec:
+                    return  # Checked recently enough
+            except ValueError:
+                pass
+
+        # Claim the slot (non-blocking test-and-clear)
+        if not _gmail_check_running.is_set():
+            return
+        _gmail_check_running.clear()
+
+        def _run():
+            try:
+                from services.gmail_monitor import check_and_process
+                check_and_process(app)
+            finally:
+                _gmail_check_running.set()
+
+        threading.Thread(target=_run, daemon=True, name="gmail-check").start()
+
+
+def _start_open_shift_cron(app: Flask) -> None:
+    """Start APScheduler CronTrigger for the daily 10 am open-shift alert."""
+    creds_file = app.config.get("GMAIL_CREDENTIALS_FILE", "")
+    if not creds_file or not os.path.exists(creds_file):
+        return
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        from zoneinfo import ZoneInfo
+        from services.weekly_email import check_and_send_open_shift_alert
+
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(
+            func=check_and_send_open_shift_alert,
+            args=[app],
+            trigger=CronTrigger(hour=10, minute=0, timezone=ZoneInfo("America/New_York")),
+            id="open_shift_alert",
+            replace_existing=True,
+        )
+        scheduler.start()
+        app.email_scheduler = scheduler
+        app.logger.info("Open-shift alert cron started (10 am ET daily).")
+    except ImportError:
+        app.logger.warning("APScheduler not installed – open-shift alert disabled.")
+    except Exception as exc:
+        app.logger.error("Failed to start open-shift cron: %s", exc)
 
 
 def _ensure_owner_exists(app: Flask) -> None:
@@ -80,49 +162,6 @@ def _log_db_backend(app: Flask) -> None:
         app.logger.info("Database: PostgreSQL (%s)", uri.split("@")[-1])
     else:
         app.logger.warning("Database: SQLite (ephemeral – data will not persist on Render!): %s", uri)
-
-
-def _start_email_monitor(app: Flask) -> None:
-    """Start a background APScheduler job to poll Gmail, if configured."""
-    creds_file = app.config.get("GMAIL_CREDENTIALS_FILE", "")
-    if not creds_file or not os.path.exists(creds_file):
-        app.logger.info(
-            "Gmail credentials not found – email monitor disabled. "
-            "Set GMAIL_CREDENTIALS_FILE in .env to enable."
-        )
-        return
-
-    try:
-        from apscheduler.schedulers.background import BackgroundScheduler
-        from apscheduler.triggers.cron import CronTrigger
-        from zoneinfo import ZoneInfo
-        from services.gmail_monitor import check_and_process
-        from services.weekly_email import check_and_send_open_shift_alert
-
-        interval = app.config["GMAIL_CHECK_INTERVAL_MINUTES"]
-        scheduler = BackgroundScheduler(daemon=True)
-        scheduler.add_job(
-            func=check_and_process,
-            args=[app],
-            trigger="interval",
-            minutes=interval,
-            id="gmail_monitor",
-            replace_existing=True,
-        )
-        scheduler.add_job(
-            func=check_and_send_open_shift_alert,
-            args=[app],
-            trigger=CronTrigger(hour=10, minute=0, timezone=ZoneInfo("America/New_York")),
-            id="open_shift_alert",
-            replace_existing=True,
-        )
-        scheduler.start()
-        app.email_scheduler = scheduler
-        app.logger.info("Email monitor started (every %d min); open-shift alert at 10am ET.", interval)
-    except ImportError:
-        app.logger.warning("APScheduler not installed – email monitor disabled.")
-    except Exception as exc:
-        app.logger.error("Failed to start email monitor: %s", exc)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

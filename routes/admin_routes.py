@@ -429,11 +429,9 @@ def email_log():
             pass
 
     next_check = None
-    scheduler = getattr(current_app._get_current_object(), "email_scheduler", None)
-    if scheduler:
-        job = scheduler.get_job("gmail_monitor")
-        if job and job.next_run_time:
-            next_check = job.next_run_time.astimezone(NY)
+    if last_check:
+        from datetime import timedelta
+        next_check = last_check + timedelta(minutes=current_app.config.get("GMAIL_CHECK_INTERVAL_MINUTES", 5))
 
     return render_template(
         "admin_email_log.html",
