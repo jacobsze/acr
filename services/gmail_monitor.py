@@ -355,12 +355,11 @@ def check_and_process(app) -> None:
             app.logger.error("Gmail monitor: cannot get service – %s", exc)
             return
 
-        inbox_email = app.config["GMAIL_MONITOR_EMAIL"]
         try:
             result = (
                 service.users()
                 .messages()
-                .list(userId="me", q=f"to:{inbox_email}", maxResults=50)
+                .list(userId="me", q="in:inbox", maxResults=50)
                 .execute()
             )
         except Exception as exc:
