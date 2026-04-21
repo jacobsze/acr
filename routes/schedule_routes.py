@@ -234,9 +234,10 @@ def week_view(week_start: str):
 
     # Build 2 weeks
     from zoneinfo import ZoneInfo
-    from datetime import datetime
-    today = date.today()
-    now_hour = datetime.now(ZoneInfo("America/New_York")).hour
+    from datetime import datetime as _dt
+    _ny_now = _dt.now(ZoneInfo("America/New_York"))
+    today = _ny_now.date()
+    now_hour = _ny_now.hour
     all_weeks = []
     for i in range(1):
         ws_i = ws + timedelta(weeks=i)
