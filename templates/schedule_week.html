@@ -27,11 +27,21 @@
 {% set va = ('?view_as=' + view_as_user.id|string) if view_as_user else '' %}
 
 {% if is_admin_mode %}
-<div class="d-flex justify-content-end mt-3 mb-1 mx-auto sched-mobile-full" style="max-width:600px;">
+<div class="d-flex justify-content-end align-items-center gap-2 mt-3 mb-1 mx-auto sched-mobile-full flex-wrap" style="max-width:600px;">
   <form method="post" action="{{ url_for('admin.send_weekly_email') }}"
         onsubmit="return confirm('Send weekly schedule email now?')">
     <button type="submit" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-envelope"></i> Send weekly email
+    </button>
+  </form>
+  <form method="post" action="{{ url_for('admin.test_open_shift_email') }}" class="d-flex align-items-center gap-1">
+    <select name="scenario" class="form-select form-select-sm" style="width:auto;">
+      <option value="am">AM shift open</option>
+      <option value="pm">PM shift open</option>
+      <option value="both" selected>Both shifts open</option>
+    </select>
+    <button type="submit" class="btn btn-outline-warning btn-sm text-nowrap">
+      <i class="bi bi-send"></i> Send test
     </button>
   </form>
 </div>
