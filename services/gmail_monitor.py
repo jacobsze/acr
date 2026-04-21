@@ -321,7 +321,8 @@ def _process_one(app, service, msg_id, volunteers):
             else:
                 results = _apply_parsed(app, parsed, content, sender_email=content["from_email"])
                 status = "success" if any(r["status"] == "success" for r in results) else "no_action"
-                if results or parsed.get("action") in (None, "unknown"):
+                # Reply only when a change was made or Claude flagged low confidence
+                if any(r["status"] in ("success", "low_confidence") for r in results):
                     _send_summary_email(app, service, content, parsed, results)
 
     except Exception as exc:
