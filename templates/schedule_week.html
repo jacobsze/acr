@@ -25,6 +25,18 @@
 
 {# ── Week navigation ──────────────────────────────────────────────────────── #}
 {% set va = ('?view_as=' + view_as_user.id|string) if view_as_user else '' %}
+
+{% if is_admin_mode %}
+<div class="d-flex justify-content-end mt-3 mb-1 mx-auto sched-mobile-full" style="max-width:600px;">
+  <form method="post" action="{{ url_for('admin.send_weekly_email') }}"
+        onsubmit="return confirm('Send weekly schedule email now?')">
+    <button type="submit" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-envelope"></i> Send weekly email
+    </button>
+  </form>
+</div>
+{% endif %}
+
 <div class="d-flex align-items-center justify-content-between mt-2 mb-3 mx-auto sched-mobile-full" style="max-width:600px;">
   <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}{{ va }}"
      class="btn btn-outline-secondary btn-sm">

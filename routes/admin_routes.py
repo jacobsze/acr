@@ -346,6 +346,21 @@ def change_log():
     return render_template("admin_change_log.html", logs=logs)
 
 
+# ── Weekly schedule email ─────────────────────────────────────────────────────
+
+@admin_bp.route("/send-weekly-email", methods=["POST"])
+@admin_required
+def send_weekly_email():
+    try:
+        from services.weekly_email import send_weekly_schedule_email
+        result = send_weekly_schedule_email(current_app._get_current_object())
+        flash(f"Weekly schedule email sent to {result['recipient']}.", "success")
+    except Exception as exc:
+        flash(f"Failed to send weekly email: {exc}", "error")
+    return redirect(request.referrer or url_for("schedule.week_view",
+                                                 week_start=date.today().isoformat()))
+
+
 # ── Email log ─────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/email-log/check", methods=["POST"])
