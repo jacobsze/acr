@@ -293,6 +293,12 @@ body {
   color: #333;
 }
 
+/* ── Past shift cells ───────────────────────────────────────────────────── */
+.sched-past-shift {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* ── Upcoming schedule: day row separation ──────────────────────────────── */
 .sched-table tbody tr {
   border-top: 2px solid #bbb;

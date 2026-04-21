@@ -233,7 +233,10 @@ def week_view(week_start: str):
     is_admin_mode = g.user.is_admin_or_owner() and view_as_user is None
 
     # Build 2 weeks
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
     today = date.today()
+    now_hour = datetime.now(ZoneInfo("America/New_York")).hour
     all_weeks = []
     for i in range(1):
         ws_i = ws + timedelta(weeks=i)
@@ -263,6 +266,7 @@ def week_view(week_start: str):
         all_volunteers=all_volunteers,
         all_active_users=all_active_users,
         today=today,
+        now_hour=now_hour,
         cap=current_app.config["MAX_VOLUNTEERS_PER_SHIFT"],
         view_as_user=view_as_user,
         effective_user=effective_user,
