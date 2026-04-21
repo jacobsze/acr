@@ -98,7 +98,7 @@
           {# ── VOLUNTEER (or owner view-as) view ───────────────────────── #}
           {% set my_id = effective_user.id %}
           {% set my_name = effective_user.name %}
-          {% set show_add = not slot.user_assigned and vols|length < 2 and not slot.is_full and d >= today %}
+          {% set show_add = not slot.user_assigned and vols|length < 2 and not slot.is_full and d >= today and not is_past %}
 
           {% if vols|length == 0 and d >= today %}
             <div class="sched-slot-row sched-need-vol fw-bold">Need Volunteers</div>
