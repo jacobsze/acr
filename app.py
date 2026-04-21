@@ -94,7 +94,10 @@ def _start_email_monitor(app: Flask) -> None:
 
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        from zoneinfo import ZoneInfo
         from services.gmail_monitor import check_and_process
+        from services.weekly_email import check_and_send_open_shift_alert
 
         interval = app.config["GMAIL_CHECK_INTERVAL_MINUTES"]
         scheduler = BackgroundScheduler(daemon=True)
@@ -106,9 +109,16 @@ def _start_email_monitor(app: Flask) -> None:
             id="gmail_monitor",
             replace_existing=True,
         )
+        scheduler.add_job(
+            func=check_and_send_open_shift_alert,
+            args=[app],
+            trigger=CronTrigger(hour=10, minute=0, timezone=ZoneInfo("America/New_York")),
+            id="open_shift_alert",
+            replace_existing=True,
+        )
         scheduler.start()
         app.email_scheduler = scheduler
-        app.logger.info("Email monitor started (every %d min).", interval)
+        app.logger.info("Email monitor started (every %d min); open-shift alert at 10am ET.", interval)
     except ImportError:
         app.logger.warning("APScheduler not installed – email monitor disabled.")
     except Exception as exc:

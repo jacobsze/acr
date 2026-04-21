@@ -361,6 +361,25 @@ def send_weekly_email():
                                                  week_start=date.today().isoformat()))
 
 
+@admin_bp.route("/test-open-shift-email", methods=["POST"])
+@admin_required
+def test_open_shift_email():
+    scenario = request.form.get("scenario", "both")
+    open_shifts = {"am": ["AM"], "pm": ["PM"], "both": ["AM", "PM"]}.get(scenario, ["AM", "PM"])
+    try:
+        from services.weekly_email import send_open_shift_alert
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        ny_now = datetime.now(ZoneInfo("America/New_York"))
+        target_date = ny_now.date() + timedelta(days=2)
+        result = send_open_shift_alert(current_app._get_current_object(), target_date, open_shifts)
+        flash(f"Test open-shift email sent to {result['recipient']} — {result['subject']}", "success")
+    except Exception as exc:
+        flash(f"Failed to send test email: {exc}", "error")
+    return redirect(request.referrer or url_for("schedule.week_view",
+                                                 week_start=date.today().isoformat()))
+
+
 # ── Email log ─────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/email-log/check", methods=["POST"])
