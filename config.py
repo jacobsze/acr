@@ -22,6 +22,8 @@ class Config:
         else "sqlite:///" + os.environ.get("DATABASE_PATH", "./acr.db")
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Re-check connections before use; prevents stale-connection ISEs after app sleep
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
 
     # Owner – promoted to owner role automatically on startup
     OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "").strip().lower()

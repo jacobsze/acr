@@ -78,33 +78,36 @@ def _wire_gmail_check(app: Flask) -> None:
 
     @app.before_request
     def _lazy_gmail_check():
-        if not _gmail_check_running.is_set():
-            return  # Already running
+        try:
+            if not _gmail_check_running.is_set():
+                return  # Already running
 
-        interval_sec = app.config["GMAIL_CHECK_INTERVAL_MINUTES"] * 60
-        from models import AppSetting
-        setting = AppSetting.query.get("last_email_check")
-        if setting:
-            try:
-                last = datetime.fromisoformat(setting.value).replace(tzinfo=timezone.utc)
-                if (datetime.now(timezone.utc) - last).total_seconds() < interval_sec:
-                    return  # Checked recently enough
-            except ValueError:
-                pass
+            interval_sec = app.config["GMAIL_CHECK_INTERVAL_MINUTES"] * 60
+            from models import AppSetting
+            setting = AppSetting.query.get("last_email_check")
+            if setting:
+                try:
+                    last = datetime.fromisoformat(setting.value).replace(tzinfo=timezone.utc)
+                    if (datetime.now(timezone.utc) - last).total_seconds() < interval_sec:
+                        return  # Checked recently enough
+                except ValueError:
+                    pass
 
-        # Claim the slot (non-blocking test-and-clear)
-        if not _gmail_check_running.is_set():
-            return
-        _gmail_check_running.clear()
+            # Claim the slot (non-blocking test-and-clear)
+            if not _gmail_check_running.is_set():
+                return
+            _gmail_check_running.clear()
 
-        def _run():
-            try:
-                from services.gmail_monitor import check_and_process
-                check_and_process(app)
-            finally:
-                _gmail_check_running.set()
+            def _run():
+                try:
+                    from services.gmail_monitor import check_and_process
+                    check_and_process(app)
+                finally:
+                    _gmail_check_running.set()
 
-        threading.Thread(target=_run, daemon=True, name="gmail-check").start()
+            threading.Thread(target=_run, daemon=True, name="gmail-check").start()
+        except Exception as exc:
+            app.logger.warning("Gmail lazy-check hook error (ignored): %s", exc)
 
 
 def _start_open_shift_cron(app: Flask) -> None:
