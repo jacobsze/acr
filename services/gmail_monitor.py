@@ -60,7 +60,8 @@ def _get_service(app):
 
 
 def _extract_content(msg: dict) -> dict:
-    """Pull subject, sender, plain-text body, Message-ID, and thread ID out of a Gmail message."""
+    """Pull subject, sender, plain-text body, Message-ID, thread ID, and sent time."""
+    from datetime import datetime
     headers = {h["name"]: h["value"] for h in msg["payload"]["headers"]}
     subject = headers.get("Subject", "")
     from_raw = headers.get("From", "")
@@ -86,12 +87,22 @@ def _extract_content(msg: dict) -> dict:
         if data:
             body = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
 
+    # internalDate is epoch milliseconds (UTC) set by Gmail when it received the message
+    sent_at = None
+    try:
+        ms = int(msg.get("internalDate") or 0)
+        if ms:
+            sent_at = datetime.utcfromtimestamp(ms / 1000)
+    except (ValueError, TypeError):
+        pass
+
     return {
         "subject": subject,
         "from_email": from_email,
         "body": body,
         "message_id": message_id,
         "thread_id": msg.get("threadId", ""),
+        "sent_at": sent_at,
     }
 
 
@@ -384,6 +395,7 @@ def check_and_process(app) -> None:
                 parsed_action=json.dumps(parsed) if parsed else None,
                 status=status,
                 error_message=error_msg,
+                sent_at=content.get("sent_at"),
             ))
             db.session.commit()
 
@@ -420,4 +432,6 @@ def reprocess_message(app, log_id: int) -> None:
         log.subject = content["subject"]
     if content.get("body"):
         log.body_snippet = content["body"][:500]
+    if content.get("sent_at"):
+        log.sent_at = content["sent_at"]
     db.session.commit()

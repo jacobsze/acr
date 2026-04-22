@@ -54,6 +54,17 @@ def create_app(config_class=Config) -> Flask:
         except Exception:
             return {}
 
+    @app.template_filter("et_fmt")
+    def et_fmt_filter(dt):
+        """Format a naive-UTC datetime as 12h ET, e.g. '4/22 9:46 AM'."""
+        if dt is None:
+            return "—"
+        from zoneinfo import ZoneInfo
+        from datetime import timezone as _tz
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_tz.utc)
+        return dt.astimezone(ZoneInfo("America/New_York")).strftime("%-m/%-d %-I:%M %p")
+
     # ── Gmail lazy-check (fires on requests when overdue) ─────────────────
     _wire_gmail_check(app)
 

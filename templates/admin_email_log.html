@@ -48,7 +48,7 @@
       {% for log in logs %}
       <tr>
         <td class="text-nowrap small text-muted">
-          {{ log.processed_at.strftime('%m/%d %H:%M') }}
+          {{ (log.sent_at or log.processed_at) | et_fmt }}
         </td>
         <td class="small">{{ log.sender_email or '—' }}</td>
         <td class="small">{{ log.subject or '—' }}</td>

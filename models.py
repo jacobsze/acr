@@ -120,4 +120,5 @@ class EmailProcessingLog(db.Model):
     parsed_action = db.Column(db.Text, nullable=True)  # JSON
     status = db.Column(db.String(50), nullable=True)   # success | no_action | failed
     error_message = db.Column(db.Text, nullable=True)
+    sent_at = db.Column(db.DateTime, nullable=True)     # when the email was sent (from internalDate)
     processed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
