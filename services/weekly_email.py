@@ -5,8 +5,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 
-WEEKLY_EMAIL_RECIPIENT    = "jacob.sze@gmail.com"
-OPEN_SHIFT_EMAIL_RECIPIENT = "jacob.sze@gmail.com"
+WEEKLY_EMAIL_RECIPIENT       = "jacob.sze@gmail.com"
+OPEN_SHIFT_EMAIL_RECIPIENT   = "jacob.sze@gmail.com"
+CHANGE_NOTIFICATION_RECIPIENT = "jacob.sze@gmail.com"
 
 _AM_HDR  = "#b8cedd"
 _PM_HDR  = "#b8d8b8"
@@ -171,6 +172,36 @@ def send_open_shift_alert(app, target_date, open_shifts):
     _send_gmail(app, OPEN_SHIFT_EMAIL_RECIPIENT, subject, html_body)
     app.logger.info("Open-shift alert sent – %s", subject)
     return {"recipient": OPEN_SHIFT_EMAIL_RECIPIENT, "subject": subject}
+
+
+def send_schedule_change_email(app, changed_by_name, adds, removes):
+    """Send a change-notification email listing which shifts were added or removed."""
+    rows = []
+    for r in removes:
+        rows.append(
+            f'<li style="color:#cc0000; margin-bottom:4px;">'
+            f'<strong>{r["name"]}</strong> removed from '
+            f'{r["shift_type"]} on {r["date"].strftime("%A, %-m/%-d")}</li>'
+        )
+    for a in adds:
+        rows.append(
+            f'<li style="color:#1a7a1a; margin-bottom:4px;">'
+            f'<strong>{a["name"]}</strong> added to '
+            f'{a["shift_type"]} on {a["date"].strftime("%A, %-m/%-d")}</li>'
+        )
+
+    n = len(adds) + len(removes)
+    subject = f"Schedule update by {changed_by_name}"
+    html_body = (
+        f'<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">'
+        f'<p><strong>{changed_by_name}</strong> made '
+        f'{n} schedule change{"s" if n != 1 else ""}:</p>'
+        f'<ul style="padding-left:20px;">{"".join(rows)}</ul>'
+        f'</body></html>'
+    )
+    _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
+    app.logger.info("Schedule change notification sent – %s", subject)
+    return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}
 
 
 def check_and_send_open_shift_alert(app):

@@ -300,6 +300,8 @@ def bulk_save():
 
     errors = []
     successes = 0
+    applied_removes = []
+    applied_adds = []
 
     for r in removes:
         try:
@@ -327,6 +329,8 @@ def bulk_save():
                 volunteer_name=vol.name if vol else str(user_id),
                 changed_by_id=g.user.id,
             ))
+            applied_removes.append({"date": d, "shift_type": shift_type,
+                                     "name": vol.name if vol else str(user_id)})
             successes += 1
 
     for a in adds:
@@ -366,21 +370,25 @@ def bulk_save():
             volunteer_name=target.name if target else str(user_id),
             changed_by_id=g.user.id,
         ))
+        applied_adds.append({"date": d, "shift_type": shift_type,
+                              "name": target.name if target else str(user_id)})
         successes += 1
 
     db.session.commit()
 
     if successes:
-        if g.user.is_admin_or_owner():
-            try:
-                from services.weekly_email import send_weekly_schedule_email
-                send_weekly_schedule_email(current_app._get_current_object())
-                flash(f"Schedule updated and weekly email sent ({successes} change{'s' if successes != 1 else ''}).", "success")
-            except Exception as exc:
-                current_app.logger.warning("Email send failed after save: %s", exc)
-                flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}) — email send failed.", "warning")
-        else:
-            flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}).", "success")
+        try:
+            from services.weekly_email import send_schedule_change_email
+            send_schedule_change_email(
+                current_app._get_current_object(),
+                changed_by_name=g.user.name,
+                adds=applied_adds,
+                removes=applied_removes,
+            )
+            flash(f"Schedule updated and email sent ({successes} change{'s' if successes != 1 else ''}).", "success")
+        except Exception as exc:
+            current_app.logger.warning("Change notification email failed: %s", exc)
+            flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}) — email send failed.", "warning")
     for e in errors[:3]:
         flash(e, "error")
 
