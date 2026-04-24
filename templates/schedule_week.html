@@ -180,8 +180,9 @@
       <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-discard">
         Discard
       </button>
-      <button type="button" class="btn btn-success btn-sm" id="btn-save">
-        <i class="bi bi-check-circle"></i> Save
+      <button type="button" class="btn btn-success" id="btn-save">
+        <i class="bi bi-check-circle"></i>
+        {% if is_admin_mode %}Save and send email{% else %}Save{% endif %}
       </button>
     </div>
   </div>
@@ -196,13 +197,14 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="confirm-body">
-        <p class="text-muted small mb-2">The following changes will be saved:</p>
+        <p class="text-muted small mb-2">The following changes will be saved{% if is_admin_mode %} and the weekly schedule email will be sent{% endif %}:</p>
         <ul class="list-unstyled mb-0" id="confirm-list"></ul>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-success" id="btn-confirm">
-          <i class="bi bi-check-circle"></i> Confirm &amp; Save
+          <i class="bi bi-check-circle"></i>
+          {% if is_admin_mode %}Save and send email{% else %}Save{% endif %}
         </button>
       </div>
     </div>
@@ -387,7 +389,12 @@ if (!IS_ADMIN) attachVolListeners(document.body);
 
 // ── Save bar buttons ────────────────────────────────────────────────────────
 
-document.getElementById('btn-discard')?.addEventListener('click', () => window.location.reload());
+let leavingIntentionally = false;
+
+document.getElementById('btn-discard')?.addEventListener('click', () => {
+  leavingIntentionally = true;
+  window.location.reload();
+});
 
 document.getElementById('btn-save')?.addEventListener('click', () => {
   const list = document.getElementById('confirm-list');
@@ -408,11 +415,19 @@ document.getElementById('btn-save')?.addEventListener('click', () => {
 });
 
 document.getElementById('btn-confirm')?.addEventListener('click', () => {
+  leavingIntentionally = true;
   document.getElementById('changes-input').value = JSON.stringify({
     adds:    pendingAdds.map(a => ({date:a.date, shift_type:a.shift_type, user_id:a.user_id})),
     removes: pendingRemoves.map(r => ({date:r.date, shift_type:r.shift_type, user_id:r.user_id})),
   });
   document.getElementById('save-form').submit();
+});
+
+window.addEventListener('beforeunload', e => {
+  if (!leavingIntentionally && (pendingAdds.length + pendingRemoves.length) > 0) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
 // ── "View as" dropdown ─────────────────────────────────────────────────────
