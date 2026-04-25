@@ -98,6 +98,11 @@ Body:
 
 {instructions}
 
+ALWAYS FOLLOW THIS RULE: If a volunteer says they cannot make a shift, need someone to \
+cover for them, or is asking for coverage (e.g. "I can't make it", "can someone cover \
+my shift", "I won't be able to come"), classify as action="remove" with confidence="low" \
+and identify the date/shift from context. Never return action="unknown" for coverage requests.
+
 Respond with ONLY a JSON object — no markdown, no extra text:
 {{
   "action": "add" | "remove" | "unknown",
