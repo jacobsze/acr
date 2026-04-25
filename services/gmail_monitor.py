@@ -109,7 +109,8 @@ def _extract_content(msg: dict) -> dict:
 def _apply_parsed(app, parsed, content, sender_email=None):
     """
     Try to apply an add/remove action from a parsed result.
-    Returns a list of result dicts, one per attempted date, each with:
+    volunteer_email may be a string or a list (multiple volunteers in one email).
+    Returns a list of result dicts, one per volunteer+date combination, each with:
       date, shift_type, action, volunteer_name, status, message
     Possible statuses: success, skipped_past, already_assigned, not_found,
                        at_capacity, low_confidence, unknown_action
@@ -139,17 +140,8 @@ def _apply_parsed(app, parsed, content, sender_email=None):
     if not (vol_email and date_val and shift_type):
         return []
 
-    target_user = User.query.filter_by(email=vol_email, active=True).first()
-    if not target_user:
-        return [{
-            "date": date_val,
-            "shift_type": shift_type,
-            "action": action,
-            "volunteer_name": vol_email,
-            "status": "not_found",
-            "message": f"No active volunteer found with email {vol_email}.",
-        }]
-
+    # Claude may return a list of emails when multiple volunteers are mentioned
+    vol_emails = vol_email if isinstance(vol_email, list) else [vol_email]
     date_strs = date_val if isinstance(date_val, list) else [date_val]
     cap = app.config["MAX_VOLUNTEERS_PER_SHIFT"]
     today = date.today()
@@ -157,75 +149,89 @@ def _apply_parsed(app, parsed, content, sender_email=None):
     any_success = False
     changed_by_note = f"Email from {sender_email}" if sender_email else "Email (LLM)"
 
-    for date_str in date_strs:
-        target_date = date.fromisoformat(date_str)
-        r = {
-            "date": date_str,
-            "shift_type": shift_type,
-            "action": action,
-            "volunteer_name": target_user.name,
-            "status": None,
-            "message": None,
-        }
-
-        if target_date < today:
-            r["status"] = "skipped_past"
-            r["message"] = f"{date_str} is in the past — skipped."
-            results.append(r)
+    for single_email in vol_emails:
+        target_user = User.query.filter_by(email=single_email, active=True).first()
+        if not target_user:
+            for date_str in date_strs:
+                results.append({
+                    "date": date_str,
+                    "shift_type": shift_type,
+                    "action": action,
+                    "volunteer_name": single_email,
+                    "status": "not_found",
+                    "message": f"No active volunteer found with email {single_email}.",
+                })
             continue
 
-        materialize_if_needed(target_date, shift_type)
+        for date_str in date_strs:
+            target_date = date.fromisoformat(date_str)
+            r = {
+                "date": date_str,
+                "shift_type": shift_type,
+                "action": action,
+                "volunteer_name": target_user.name,
+                "status": None,
+                "message": None,
+            }
 
-        if action == "add":
-            existing = ShiftAssignment.query.filter_by(
-                date=target_date, shift_type=shift_type, user_id=target_user.id,
-            ).first()
-            if existing:
-                r["status"] = "already_assigned"
-                r["message"] = f"{target_user.name} is already on {shift_type} on {date_str}."
+            if target_date < today:
+                r["status"] = "skipped_past"
+                r["message"] = f"{date_str} is in the past — skipped."
                 results.append(r)
                 continue
-            count = ShiftAssignment.query.filter_by(
-                date=target_date, shift_type=shift_type,
-            ).count()
-            if count >= cap:
-                r["status"] = "at_capacity"
-                r["message"] = f"{shift_type} shift on {date_str} is full ({cap}/{cap} volunteers)."
-                results.append(r)
-                continue
-            db.session.add(ShiftAssignment(
-                date=target_date, shift_type=shift_type, user_id=target_user.id,
-                notes=f"Added via email: {content['subject']}",
-            ))
-            db.session.add(ScheduleChangeLog(
-                log_type="upcoming", date=target_date, shift_type=shift_type,
-                action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
-                changed_by_note=changed_by_note,
-            ))
-            r["status"] = "success"
-            r["message"] = f"Added {target_user.name} to {shift_type} on {date_str}."
-            any_success = True
 
-        elif action == "remove":
-            existing = ShiftAssignment.query.filter_by(
-                date=target_date, shift_type=shift_type, user_id=target_user.id,
-            ).first()
-            if not existing:
-                r["status"] = "not_found"
-                r["message"] = f"{target_user.name} is not on {shift_type} on {date_str}."
-                results.append(r)
-                continue
-            db.session.delete(existing)
-            db.session.add(ScheduleChangeLog(
-                log_type="upcoming", date=target_date, shift_type=shift_type,
-                action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
-                changed_by_note=changed_by_note,
-            ))
-            r["status"] = "success"
-            r["message"] = f"Removed {target_user.name} from {shift_type} on {date_str}."
-            any_success = True
+            materialize_if_needed(target_date, shift_type)
 
-        results.append(r)
+            if action == "add":
+                existing = ShiftAssignment.query.filter_by(
+                    date=target_date, shift_type=shift_type, user_id=target_user.id,
+                ).first()
+                if existing:
+                    r["status"] = "already_assigned"
+                    r["message"] = f"{target_user.name} is already on {shift_type} on {date_str}."
+                    results.append(r)
+                    continue
+                count = ShiftAssignment.query.filter_by(
+                    date=target_date, shift_type=shift_type,
+                ).count()
+                if count >= cap:
+                    r["status"] = "at_capacity"
+                    r["message"] = f"{shift_type} shift on {date_str} is full ({cap}/{cap} volunteers)."
+                    results.append(r)
+                    continue
+                db.session.add(ShiftAssignment(
+                    date=target_date, shift_type=shift_type, user_id=target_user.id,
+                    notes=f"Added via email: {content['subject']}",
+                ))
+                db.session.add(ScheduleChangeLog(
+                    log_type="upcoming", date=target_date, shift_type=shift_type,
+                    action="add", volunteer_id=target_user.id, volunteer_name=target_user.name,
+                    changed_by_note=changed_by_note,
+                ))
+                r["status"] = "success"
+                r["message"] = f"Added {target_user.name} to {shift_type} on {date_str}."
+                any_success = True
+
+            elif action == "remove":
+                existing = ShiftAssignment.query.filter_by(
+                    date=target_date, shift_type=shift_type, user_id=target_user.id,
+                ).first()
+                if not existing:
+                    r["status"] = "not_found"
+                    r["message"] = f"{target_user.name} is not on {shift_type} on {date_str}."
+                    results.append(r)
+                    continue
+                db.session.delete(existing)
+                db.session.add(ScheduleChangeLog(
+                    log_type="upcoming", date=target_date, shift_type=shift_type,
+                    action="remove", volunteer_id=target_user.id, volunteer_name=target_user.name,
+                    changed_by_note=changed_by_note,
+                ))
+                r["status"] = "success"
+                r["message"] = f"Removed {target_user.name} from {shift_type} on {date_str}."
+                any_success = True
+
+            results.append(r)
 
     if any_success:
         db.session.commit()
@@ -356,6 +362,8 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                     _send_summary_email(app, service, content, parsed, results)
 
     except Exception as exc:
+        from models import db as _db
+        _db.session.rollback()  # Clear any aborted transaction so the log update can still commit
         app.logger.error("Gmail monitor: error on msg %s – %s", msg_id, exc)
         status = "failed"
         error_msg = str(exc)
