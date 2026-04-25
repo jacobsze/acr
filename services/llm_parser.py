@@ -17,7 +17,11 @@ Determine:
  If only a day of week is given with no specific date, assume the next upcoming occurrence of that day.
 5. Which shift: AM or PM?
 
-If this is not a schedule request, set action to "unknown".\
+Coverage requests ("I can't make it", "can someone cover my shift?") should be treated as\
+ action "remove" with confidence "low" — the volunteer wants to drop the shift but a human\
+ needs to confirm and find a replacement. Do not set action to "unknown" for coverage requests.
+
+If this is not a schedule request at all, set action to "unknown".\
 """
 
 
