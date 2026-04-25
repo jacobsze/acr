@@ -399,8 +399,9 @@ def check_email_now():
 def reprocess_email(log_id):
     try:
         from services.gmail_monitor import reprocess_message
-        reprocess_message(current_app._get_current_object(), log_id)
-        flash("Email re-processed.", "success")
+        ignore_reg = request.form.get("ignore_registration") == "1"
+        reprocess_message(current_app._get_current_object(), log_id, ignore_registration=ignore_reg)
+        flash("Email re-processed." + (" (sender registration ignored)" if ignore_reg else ""), "success")
     except Exception as exc:
         flash(f"Reprocess failed: {exc}", "error")
     return redirect(url_for("admin.email_log"))

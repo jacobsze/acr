@@ -288,7 +288,7 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
         app.logger.error("Gmail monitor: failed to send summary email – %s", exc)
 
 
-def _process_one(app, service, msg_id, volunteers):
+def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
     """
     Fetch, parse, and apply a single Gmail message.
     Returns (status, error_msg, parsed, content).
@@ -312,7 +312,7 @@ def _process_one(app, service, msg_id, volunteers):
         content = _extract_content(msg)
 
         sender = content["from_email"].lower()
-        if sender not in volunteer_emails:
+        if sender not in volunteer_emails and not ignore_registration:
             app.logger.info(
                 "Gmail monitor: sender %s not a registered volunteer – running LLM for review only",
                 sender,
@@ -419,7 +419,7 @@ def check_and_process(app) -> None:
             db.session.commit()
 
 
-def reprocess_message(app, log_id: int) -> None:
+def reprocess_message(app, log_id: int, ignore_registration: bool = False) -> None:
     """Re-fetch and re-parse a previously logged email, updating the log entry in place.
     Must be called from within an active app/request context (i.e. from a route)."""
     from datetime import datetime
@@ -439,7 +439,10 @@ def reprocess_message(app, log_id: int) -> None:
         return
 
     volunteers = User.query.filter_by(active=True).all()
-    status, error_msg, parsed, content = _process_one(app, service, log.gmail_message_id, volunteers)
+    status, error_msg, parsed, content = _process_one(
+        app, service, log.gmail_message_id, volunteers,
+        ignore_registration=ignore_registration,
+    )
 
     log.status = status
     log.error_message = error_msg

@@ -111,6 +111,16 @@
                 <i class="bi bi-arrow-repeat"></i>
               </button>
             </form>
+            <form method="post"
+                  action="{{ url_for('admin.reprocess_email', log_id=log.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Re-process ignoring sender registration?')">
+              <input type="hidden" name="ignore_registration" value="1">
+              <button type="submit" class="btn btn-link btn-sm p-0 text-warning"
+                      title="Re-process (ignore sender registration)">
+                <i class="bi bi-arrow-repeat"></i><i class="bi bi-shield-slash" style="font-size:.7em; vertical-align:top;"></i>
+              </button>
+            </form>
           {% endif %}
         </td>
       </tr>
