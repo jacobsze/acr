@@ -382,6 +382,7 @@ def bulk_save():
                 changed_by_name=g.user.name,
                 adds=applied_adds,
                 removes=applied_removes,
+                is_admin=is_admin,
             )
             flash(f"Schedule updated and email sent ({successes} change{'s' if successes != 1 else ''}).", "success")
         except Exception as exc:

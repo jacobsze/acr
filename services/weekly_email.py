@@ -174,31 +174,78 @@ def send_open_shift_alert(app, target_date, open_shifts):
     return {"recipient": OPEN_SHIFT_EMAIL_RECIPIENT, "subject": subject}
 
 
-def send_schedule_change_email(app, changed_by_name, adds, removes):
+def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=False):
     """Send a change-notification email listing which shifts were added or removed."""
-    rows = []
-    for r in removes:
-        rows.append(
-            f'<li style="color:#cc0000; margin-bottom:4px;">'
-            f'<strong>{r["name"]}</strong> removed from '
-            f'{r["shift_type"]} on {r["date"].strftime("%A, %-m/%-d")}</li>'
-        )
-    for a in adds:
-        rows.append(
-            f'<li style="color:#1a7a1a; margin-bottom:4px;">'
-            f'<strong>{a["name"]}</strong> added to '
-            f'{a["shift_type"]} on {a["date"].strftime("%A, %-m/%-d")}</li>'
-        )
 
-    n = len(adds) + len(removes)
-    subject = f"Schedule update by {changed_by_name}"
-    html_body = (
-        f'<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">'
-        f'<p><strong>{changed_by_name}</strong> made '
-        f'{n} schedule change{"s" if n != 1 else ""}:</p>'
-        f'<ul style="padding-left:20px;">{"".join(rows)}</ul>'
-        f'</body></html>'
-    )
+    def _fmt(d):
+        return d.strftime("%-m/%-d (%a)")
+
+    total = len(adds) + len(removes)
+
+    if is_admin:
+        # Admin/owner made changes — list all affected volunteers
+        subject = f"Schedule updated by {changed_by_name}"
+        rows = []
+        for r in removes:
+            rows.append(
+                f'<li style="color:#cc0000; margin-bottom:4px;">'
+                f'<strong>{r["name"]}</strong> removed from '
+                f'{r["shift_type"]} on {_fmt(r["date"])}</li>'
+            )
+        for a in adds:
+            rows.append(
+                f'<li style="color:#1a7a1a; margin-bottom:4px;">'
+                f'<strong>{a["name"]}</strong> added to '
+                f'{a["shift_type"]} on {_fmt(a["date"])}</li>'
+            )
+        html_body = (
+            f'<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">'
+            f'<p><strong>{changed_by_name}</strong> has updated the schedule:</p>'
+            f'<ul style="padding-left:20px;">{"".join(rows)}</ul>'
+            f'</body></html>'
+        )
+    else:
+        # Volunteer changed their own shifts
+        if total == 1:
+            if adds:
+                a = adds[0]
+                subject = f"{changed_by_name} signed up for the {_fmt(a['date'])} {a['shift_type']} shift"
+                detail = (
+                    f'<strong>{changed_by_name}</strong> has signed up for the '
+                    f'<strong>{a["shift_type"]}</strong> shift on {_fmt(a["date"])}.'
+                )
+            else:
+                r = removes[0]
+                subject = f"{changed_by_name} dropped the {_fmt(r['date'])} {r['shift_type']} shift"
+                detail = (
+                    f'<strong>{changed_by_name}</strong> has dropped the '
+                    f'<strong>{r["shift_type"]}</strong> shift on {_fmt(r["date"])}.'
+                )
+            html_body = (
+                f'<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">'
+                f'<p>{detail}</p>'
+                f'</body></html>'
+            )
+        else:
+            subject = f"{changed_by_name} updated their schedule ({total} changes)"
+            rows = []
+            for r in removes:
+                rows.append(
+                    f'<li style="color:#cc0000; margin-bottom:4px;">'
+                    f'Dropped <strong>{r["shift_type"]}</strong> on {_fmt(r["date"])}</li>'
+                )
+            for a in adds:
+                rows.append(
+                    f'<li style="color:#1a7a1a; margin-bottom:4px;">'
+                    f'Signed up for <strong>{a["shift_type"]}</strong> on {_fmt(a["date"])}</li>'
+                )
+            html_body = (
+                f'<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">'
+                f'<p><strong>{changed_by_name}</strong> has updated their schedule:</p>'
+                f'<ul style="padding-left:20px;">{"".join(rows)}</ul>'
+                f'</body></html>'
+            )
+
     _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
     app.logger.info("Schedule change notification sent – %s", subject)
     return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}

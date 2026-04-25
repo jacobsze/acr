@@ -184,9 +184,11 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
                 "message": None,
             }
 
+            fmt_date = target_date.strftime("%-m/%-d (%a)")
+
             if target_date < today:
                 r["status"] = "skipped_past"
-                r["message"] = f"{date_str} is in the past — skipped."
+                r["message"] = f"{fmt_date} is in the past — skipped."
                 results.append(r)
                 continue
 
@@ -198,7 +200,7 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
                 ).first()
                 if existing:
                     r["status"] = "already_assigned"
-                    r["message"] = f"{target_user.name} is already on {shift_type} on {date_str}."
+                    r["message"] = f"{target_user.name} is already on {shift_type} on {fmt_date}."
                     results.append(r)
                     continue
                 count = ShiftAssignment.query.filter_by(
@@ -206,7 +208,7 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
                 ).count()
                 if count >= cap:
                     r["status"] = "at_capacity"
-                    r["message"] = f"{shift_type} shift on {date_str} is full ({cap}/{cap} volunteers)."
+                    r["message"] = f"{shift_type} shift on {fmt_date} is full ({cap}/{cap} volunteers)."
                     results.append(r)
                     continue
                 db.session.add(ShiftAssignment(
@@ -219,7 +221,7 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
                     changed_by_note=changed_by_note,
                 ))
                 r["status"] = "success"
-                r["message"] = f"Added {target_user.name} to {shift_type} on {date_str}."
+                r["message"] = f"Added {target_user.name} to {shift_type} on {fmt_date}."
                 any_success = True
 
             elif action == "remove":
@@ -228,7 +230,7 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
                 ).first()
                 if not existing:
                     r["status"] = "not_found"
-                    r["message"] = f"{target_user.name} is not on {shift_type} on {date_str}."
+                    r["message"] = f"{target_user.name} is not on {shift_type} on {fmt_date}."
                     results.append(r)
                     continue
                 db.session.delete(existing)
@@ -238,7 +240,7 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
                     changed_by_note=changed_by_note,
                 ))
                 r["status"] = "success"
-                r["message"] = f"Removed {target_user.name} from {shift_type} on {date_str}."
+                r["message"] = f"Removed {target_user.name} from {shift_type} on {target_date.strftime('%-m/%-d (%a)')}."
                 any_success = True
 
             results.append(r)
@@ -256,27 +258,37 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
     if not owner_email:
         return
 
+    status_icons = {
+        "success": "✅",
+        "skipped_past": "⏭️",
+        "already_assigned": "ℹ️",
+        "not_found": "ℹ️",
+        "not_registered": "⚠️",
+        "at_capacity": "⚠️",
+        "low_confidence": "⚠️",
+    }
     lines = []
     if processing_error:
-        lines.append(f"ERROR during processing: {processing_error}")
+        lines.append(f"⚠️ Error during processing — please handle manually:")
+        lines.append(f"   {processing_error}")
     elif not results and parsed.get("action") in (None, "unknown"):
-        reason = parsed.get("reason", "No schedule change detected.")
-        lines.append("No schedule action found.")
-        lines.append(f"Claude's interpretation: {reason}")
+        lines.append("Claude could not determine a schedule action — please review:")
+        lines.append(f"   {parsed.get('reason', 'No schedule change detected.')}")
     elif not results:
-        lines.append("No changes applied.")
+        lines.append("No changes were applied.")
     else:
-        status_icons = {
-            "success": "✅",
-            "skipped_past": "⏭️",
-            "already_assigned": "ℹ️",
-            "not_found": "ℹ️",
-            "at_capacity": "⚠️",
-            "low_confidence": "⚠️",
-        }
+        any_success = any(r["status"] == "success" for r in results)
+        needs_review = any(r["status"] in ("low_confidence", "not_registered") for r in results)
+        if any_success and not needs_review:
+            lines.append("The schedule has been automatically updated:")
+        elif any_success:
+            lines.append("The schedule was partially updated — please review the remaining items:")
+        else:
+            lines.append("No changes were applied — please review:")
+        lines.append("")
         for r in results:
             icon = status_icons.get(r["status"], "❓")
-            lines.append(f"{icon} {r['message']}")
+            lines.append(f"   {icon} {r['message']}")
 
     body = "\n".join(lines)
     original_subject = content.get("subject", "")
