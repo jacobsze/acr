@@ -3,6 +3,18 @@ from flask import request, redirect, url_for, g, current_app
 from models import db, User
 
 
+def _get_effective_user(actual_user: User) -> User:
+    """Return the user being viewed as, or actual_user if no view-as session is set."""
+    from flask import session
+    if actual_user.role != "owner":
+        return actual_user
+    view_as_id = session.get("view_as_id")
+    if not view_as_id:
+        return actual_user
+    target = User.query.filter_by(id=view_as_id, active=True).first()
+    return target or actual_user
+
+
 def get_current_user() -> User | None:
     """
     Verify the Clerk session cookie and return the matching User record.
@@ -117,6 +129,7 @@ def login_required(f):
         if not user:
             return _redirect_login()
         g.user = user
+        g.effective_user = _get_effective_user(user)
         return f(*args, **kwargs)
     return decorated
 
@@ -130,6 +143,7 @@ def admin_required(f):
         if not user.is_admin_or_owner():
             return redirect(url_for("schedule.home"))
         g.user = user
+        g.effective_user = _get_effective_user(user)
         return f(*args, **kwargs)
     return decorated
 
@@ -143,5 +157,6 @@ def owner_required(f):
         if user.role != "owner":
             return redirect(url_for("schedule.home"))
         g.user = user
+        g.effective_user = _get_effective_user(user)
         return f(*args, **kwargs)
     return decorated

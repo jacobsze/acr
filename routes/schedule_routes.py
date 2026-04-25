@@ -3,15 +3,29 @@ import json
 
 from flask import (
     Blueprint, flash, g, redirect, render_template,
-    request, url_for, current_app,
+    request, session, url_for, current_app,
 )
 
 from models import db, User, RegularSchedule, ShiftAssignment, ScheduleChangeLog
-from auth_utils import login_required, get_current_user
+from auth_utils import login_required, owner_required, get_current_user
 
 schedule_bp = Blueprint("schedule", __name__)
 
 DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+
+@schedule_bp.route("/set_view_as", methods=["POST"])
+@owner_required
+def set_view_as():
+    user_id = request.form.get("view_as_id", type=int)
+    if user_id:
+        session["view_as_id"] = user_id
+    else:
+        session.pop("view_as_id", None)
+    next_url = request.form.get("next", "")
+    if not next_url or not next_url.startswith("/"):
+        next_url = url_for("schedule.home")
+    return redirect(next_url)
 
 
 def get_week_start(for_date: date | None = None) -> date:
@@ -140,15 +154,15 @@ def home():
                 vols = sorted(shift_map[key], key=lambda u: u.name)
             else:
                 vols = sorted(regular_by_dow.get((d.weekday(), st), []), key=lambda u: u.name)
-            if any(v.id == g.user.id for v in vols):
+            if any(v.id == g.effective_user.id for v in vols):
                 my_shifts.append({
                     "shift_type": st,
-                    "others": [v for v in vols if v.id != g.user.id],
+                    "others": [v for v in vols if v.id != g.effective_user.id],
                 })
         if my_shifts:
             days.append({"date": d, "shifts": my_shifts})
 
-    return render_template("home.html", days=days, today=today)
+    return render_template("home.html", days=days, today=today, effective_user=g.effective_user)
 
 
 @schedule_bp.route("/shifts/add", methods=["POST"])
@@ -198,7 +212,7 @@ def remove_from_shift():
 
     materialize_if_needed(d, shift_type)
 
-    assignment = ShiftAssignment.query.filter_by(date=d, shift_type=shift_type, user_id=g.user.id).first()
+    assignment = ShiftAssignment.query.filter_by(date=d, shift_type=shift_type, user_id=g.effective_user.id).first()
     if not assignment:
         flash("You're not on that shift.", "info")
         return redirect(url_for("schedule.home"))
@@ -206,7 +220,7 @@ def remove_from_shift():
     db.session.delete(assignment)
     db.session.add(ScheduleChangeLog(
         log_type="upcoming", date=d, shift_type=shift_type,
-        action="remove", volunteer_id=g.user.id, volunteer_name=g.user.name,
+        action="remove", volunteer_id=g.effective_user.id, volunteer_name=g.effective_user.name,
         changed_by_id=g.user.id,
     ))
     db.session.commit()
@@ -223,16 +237,10 @@ def week_view(week_start: str):
         ws = get_week_start()
         return redirect(url_for("schedule.week_view", week_start=ws.isoformat()))
 
-    # "View as" — owner only
-    view_as_user = None
-    view_as_id = request.args.get("view_as", type=int)
-    if g.user.role == "owner" and view_as_id:
-        view_as_user = User.query.filter_by(id=view_as_id, active=True).first()
+    effective_user = g.effective_user
+    is_admin_mode = g.user.is_admin_or_owner() and effective_user.id == g.user.id
 
-    effective_user = view_as_user or g.user
-    is_admin_mode = g.user.is_admin_or_owner() and view_as_user is None
-
-    # Build 2 weeks
+    # Build schedule
     from zoneinfo import ZoneInfo
     from datetime import datetime as _dt
     _ny_now = _dt.now(ZoneInfo("America/New_York"))
@@ -254,7 +262,6 @@ def week_view(week_start: str):
         if is_admin_mode
         else []
     )
-    all_active_users = User.query.filter_by(active=True).order_by(User.name).all()
 
     return render_template(
         "schedule_week.html",
@@ -265,11 +272,9 @@ def week_view(week_start: str):
         next_week=(ws + timedelta(weeks=1)).isoformat(),
         current_week_start=get_week_start(today),
         all_volunteers=all_volunteers,
-        all_active_users=all_active_users,
         today=today,
         now_hour=now_hour,
         cap=current_app.config["MAX_VOLUNTEERS_PER_SHIFT"],
-        view_as_user=view_as_user,
         effective_user=effective_user,
         is_admin_mode=is_admin_mode,
     )
@@ -287,16 +292,9 @@ def bulk_save():
     adds = changes.get("adds", [])
     removes = changes.get("removes", [])
     week_start_str = request.form.get("week_start", "")
-    view_as_id = request.form.get("view_as_id", type=int)
 
-    is_admin = g.user.is_admin_or_owner()
-    effective_user = g.user
-
-    if view_as_id and g.user.role == "owner":
-        view_as_user = User.query.filter_by(id=view_as_id, active=True).first()
-        if view_as_user:
-            effective_user = view_as_user
-            is_admin = False  # Owner in "view as" mode acts as that volunteer
+    effective_user = g.effective_user
+    is_admin = g.user.is_admin_or_owner() and effective_user.id == g.user.id
 
     errors = []
     successes = 0
@@ -397,7 +395,4 @@ def bulk_save():
     except ValueError:
         ws = get_week_start()
 
-    redirect_url = url_for("schedule.week_view", week_start=ws.isoformat())
-    if view_as_id:
-        redirect_url += f"?view_as={view_as_id}"
-    return redirect(redirect_url)
+    return redirect(url_for("schedule.week_view", week_start=ws.isoformat()))

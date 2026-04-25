@@ -39,12 +39,24 @@ def create_app(config_class=Config) -> Flask:
     @app.context_processor
     def inject_user():
         from datetime import date
+        from flask import session
         from routes.schedule_routes import get_week_start
+        from models import User
         today = date.today()
+        actual_user = get_current_user()
+        view_as_user = None
+        view_as_candidates = []
+        if actual_user and actual_user.role == "owner":
+            view_as_id = session.get("view_as_id")
+            if view_as_id:
+                view_as_user = User.query.filter_by(id=view_as_id, active=True).first()
+            view_as_candidates = User.query.filter_by(active=True).order_by(User.name).all()
         return {
-            "current_user": get_current_user(),
+            "current_user": actual_user,
             "today": today,
             "current_week_start": get_week_start(today),
+            "view_as_user": view_as_user,
+            "view_as_candidates": view_as_candidates,
         }
 
     @app.template_filter("fromjson")

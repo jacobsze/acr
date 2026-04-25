@@ -97,6 +97,25 @@
                          href="{{ url_for('admin.ai_settings') }}">
                     <i class="bi bi-robot"></i> AI Settings
                   </a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li onclick="event.stopPropagation()">
+                    <form method="post" action="{{ url_for('schedule.set_view_as') }}" class="px-3 py-1">
+                      <input type="hidden" name="next" value="{{ request.path }}">
+                      <div class="small text-muted fw-semibold mb-1">View as volunteer:</div>
+                      <select name="view_as_id" class="form-select form-select-sm"
+                              onchange="this.form.submit()" style="min-width:160px;">
+                        <option value="">Myself ({{ current_user.name }})</option>
+                        {% for u in view_as_candidates %}
+                          {% if u.id != current_user.id %}
+                            <option value="{{ u.id }}"
+                                    {% if view_as_user and u.id == view_as_user.id %}selected{% endif %}>
+                              {{ u.name }}
+                            </option>
+                          {% endif %}
+                        {% endfor %}
+                      </select>
+                    </form>
+                  </li>
                 {% endif %}
                 <li><hr class="dropdown-divider"></li>
               {% endif %}
@@ -119,6 +138,17 @@
     </div>
   </div>
 </nav>
+
+{% if view_as_user %}
+<div class="py-1 px-3 text-center text-white" style="background:#0d6efd; font-size:.9rem;">
+  <i class="bi bi-eye-fill"></i> Viewing as <strong>{{ view_as_user.name }}</strong>
+  <form method="post" action="{{ url_for('schedule.set_view_as') }}" class="d-inline ms-3">
+    <input type="hidden" name="view_as_id" value="">
+    <input type="hidden" name="next" value="{{ request.path }}">
+    <button type="submit" class="btn btn-sm btn-outline-light py-0 px-2">Return to my view</button>
+  </form>
+</div>
+{% endif %}
 
 <!-- Flash messages -->
 <div class="container-fluid px-3 mt-2">

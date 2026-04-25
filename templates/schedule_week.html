@@ -3,28 +3,7 @@
 
 {% block content %}
 
-{# ── View-as dropdown (owner only) ───────────────────────────────────────── #}
-{% if current_user.role == 'owner' %}
-<div class="d-flex align-items-center gap-2 mt-3 mb-2 flex-wrap">
-  <span class="text-muted small fw-semibold">View as:</span>
-  <select class="form-select form-select-sm" id="view-as-select" style="width:auto; min-width:160px;">
-    <option value="">Myself ({{ current_user.name }})</option>
-    {% for u in all_active_users %}
-      {% if u.id != current_user.id %}
-        <option value="{{ u.id }}" {% if view_as_user and u.id == view_as_user.id %}selected{% endif %}>
-          {{ u.name }}
-        </option>
-      {% endif %}
-    {% endfor %}
-  </select>
-  {% if view_as_user %}
-    <span class="badge bg-info text-dark">Viewing as {{ view_as_user.name }}</span>
-  {% endif %}
-</div>
-{% endif %}
-
 {# ── Week navigation ──────────────────────────────────────────────────────── #}
-{% set va = ('?view_as=' + view_as_user.id|string) if view_as_user else '' %}
 
 {% if is_admin_mode %}
 <div class="d-flex justify-content-end align-items-center gap-2 mt-3 mb-1 mx-auto sched-mobile-full flex-wrap" style="max-width:600px;">
@@ -48,13 +27,13 @@
 {% endif %}
 
 <div class="d-flex align-items-center justify-content-between mt-2 mb-3 mx-auto sched-mobile-full" style="max-width:600px;">
-  <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}{{ va }}"
+  <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}"
      class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-chevron-left"></i> Prev
   </a>
-  <a href="{{ url_for('schedule.week_view', week_start=current_week_start) }}{{ va }}"
+  <a href="{{ url_for('schedule.week_view', week_start=current_week_start) }}"
      class="btn btn-outline-secondary btn-sm">Today</a>
-  <a href="{{ url_for('schedule.week_view', week_start=next_week) }}{{ va }}"
+  <a href="{{ url_for('schedule.week_view', week_start=next_week) }}"
      class="btn btn-outline-secondary btn-sm">
     Next <i class="bi bi-chevron-right"></i>
   </a>
@@ -213,9 +192,6 @@
 <form id="save-form" method="post" action="{{ url_for('schedule.bulk_save') }}">
   <input type="hidden" id="changes-input" name="changes_json" value="{}">
   <input type="hidden" name="week_start" value="{{ week_start.isoformat() }}">
-  {% if view_as_user %}
-    <input type="hidden" name="view_as_id" value="{{ view_as_user.id }}">
-  {% endif %}
 </form>
 
 {% endblock %}
@@ -428,13 +404,5 @@ window.addEventListener('beforeunload', e => {
   }
 });
 
-// ── "View as" dropdown ─────────────────────────────────────────────────────
-
-document.getElementById('view-as-select')?.addEventListener('change', function() {
-  const url = new URL(window.location.href);
-  if (this.value) url.searchParams.set('view_as', this.value);
-  else            url.searchParams.delete('view_as');
-  window.location.href = url.toString();
-});
 </script>
 {% endblock %}
