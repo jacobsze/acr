@@ -106,7 +106,7 @@ def _extract_content(msg: dict) -> dict:
     }
 
 
-def _apply_parsed(app, parsed, content, sender_email=None):
+def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=False):
     """
     Try to apply an add/remove action from a parsed result.
     volunteer_email may be a string or a list (multiple volunteers in one email).
@@ -151,6 +151,16 @@ def _apply_parsed(app, parsed, content, sender_email=None):
 
     for single_email in vol_emails:
         target_user = User.query.filter_by(email=single_email, active=True).first()
+        if not target_user and ignore_registration:
+            # Fallback: match by username part of the guessed email against volunteer names.
+            # e.g. "mabelcrain@..." matches "Mabel Crain" — useful when Claude guesses an
+            # email that isn't registered but the name maps to a known volunteer.
+            username = single_email.split("@")[0].lower().replace(".", "").replace("_", "").replace("-", "")
+            for candidate in User.query.filter_by(active=True).all():
+                candidate_key = candidate.name.lower().replace(" ", "")
+                if username in candidate_key or candidate_key in username:
+                    target_user = candidate
+                    break
         if not target_user:
             for date_str in date_strs:
                 results.append({
@@ -353,7 +363,8 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 status = "failed"
                 error_msg = parsed.get("error")
             else:
-                results = _apply_parsed(app, parsed, content, sender_email=content["from_email"])
+                results = _apply_parsed(app, parsed, content, sender_email=content["from_email"],
+                                        ignore_registration=ignore_registration)
                 status = "success" if any(r["status"] == "success" for r in results) else "no_action"
                 # Reply when a change was made, Claude flagged low confidence, or
                 # couldn't classify the email at all (owner should review manually)
