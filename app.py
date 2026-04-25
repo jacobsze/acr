@@ -1,4 +1,5 @@
 import os
+import subprocess
 import threading
 from datetime import datetime, timezone
 
@@ -12,9 +13,25 @@ _gmail_check_running = threading.Event()
 _gmail_check_running.set()   # "set" means idle / not running
 
 
+def _get_version() -> str:
+    """Return short git SHA — prefers RENDER_GIT_COMMIT env var set by Render."""
+    commit = os.environ.get("RENDER_GIT_COMMIT", "")
+    if commit:
+        return commit[:7]
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
 def create_app(config_class=Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
+    app.config["APP_VERSION"] = _get_version()
 
     # ── Database ──────────────────────────────────────────────────────────
     db.init_app(app)
