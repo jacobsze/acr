@@ -311,11 +311,28 @@ def _process_one(app, service, msg_id, volunteers):
         )
         content = _extract_content(msg)
 
-        if content["from_email"].lower() not in volunteer_emails:
+        sender = content["from_email"].lower()
+        if sender not in volunteer_emails:
             app.logger.info(
-                "Gmail monitor: skipping msg %s – sender %s not a volunteer",
-                msg_id, content["from_email"],
+                "Gmail monitor: sender %s not a registered volunteer – running LLM for review only",
+                sender,
             )
+            # Still parse with LLM so the owner is notified about schedule-related
+            # content (e.g. coverage requests) from group members not yet in the system.
+            parsed = parse_email_schedule_request(
+                email_subject=content["subject"],
+                email_body=content["body"],
+                email_from=content["from_email"],
+                volunteers=volunteers,
+            )
+            parsed["_not_registered"] = True
+            _send_summary_email(app, service, content, parsed, [{
+                "status": "not_registered",
+                "message": (
+                    f"⚠️ {content['from_email']} is not a registered volunteer — "
+                    "no changes were applied. Add them to the volunteer list if needed."
+                ),
+            }])
         else:
             is_volunteer = True
             parsed = parse_email_schedule_request(

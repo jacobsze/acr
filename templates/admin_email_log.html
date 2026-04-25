@@ -66,11 +66,14 @@
         <td class="small">
           {% if log.parsed_action %}
             {% set p = log.parsed_action | fromjson %}
-            {% if p.action != 'unknown' %}
+            {% if p._not_registered %}
+              <span class="badge bg-warning text-dark">not registered</span>
+            {% endif %}
+            {% if p.action not in ('unknown', None) %}
               <strong>{{ p.action | upper }}</strong>
               {{ p.volunteer_email }} on {{ p.date }} ({{ p.shift_type }})
               <span class="text-muted">[{{ p.confidence }}]</span>
-            {% else %}
+            {% elif not p._not_registered %}
               <span class="text-muted">Not a schedule request</span>
             {% endif %}
             {% if p.reason %}
