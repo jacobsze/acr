@@ -246,9 +246,20 @@ def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=Fal
                 f'</body></html>'
             )
 
-    _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
+    if is_admin:
+        recipient = CHANGE_NOTIFICATION_RECIPIENT
+    else:
+        # Volunteer save — send to all active admins/owners
+        from models import User
+        admin_emails = [
+            u.email for u in
+            User.query.filter(User.active.is_(True), User.role.in_(["admin", "owner"])).all()
+        ]
+        recipient = ", ".join(admin_emails) if admin_emails else CHANGE_NOTIFICATION_RECIPIENT
+
+    _send_gmail(app, recipient, subject, html_body)
     app.logger.info("Schedule change notification sent – %s", subject)
-    return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}
+    return {"recipient": recipient, "subject": subject}
 
 
 def check_and_send_open_shift_alert(app):
