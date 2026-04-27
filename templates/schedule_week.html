@@ -161,7 +161,8 @@
         Discard
       </button>
       <button type="button" class="btn btn-success" id="btn-save">
-        <i class="bi bi-check-circle"></i> Save and send email
+        <i class="bi bi-check-circle"></i>
+        {% if is_admin_mode %}Save changes{% else %}Save and notify group{% endif %}
       </button>
     </div>
   </div>
@@ -176,13 +177,13 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="confirm-body">
-        <p class="text-muted small mb-2">The following changes will be saved and an email notification will be sent:</p>
+        <p class="text-muted small mb-2" id="confirm-intro"></p>
         <ul class="list-unstyled mb-0" id="confirm-list"></ul>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-success" id="btn-confirm">
-          <i class="bi bi-check-circle"></i> Save and send email
+          <i class="bi bi-check-circle"></i> <span id="btn-confirm-label">Confirm</span>
         </button>
       </div>
     </div>
@@ -377,15 +378,23 @@ document.getElementById('btn-save')?.addEventListener('click', () => {
   pendingRemoves.forEach(r => {
     list.innerHTML += `<li class="text-danger mb-1">
       <i class="bi bi-dash-circle"></i>
-      Remove <strong>${r.name}</strong> from ${r.shift_type} on ${fmtDate(r.date)}
+      Remove from <strong>${r.shift_type}</strong> on ${fmtDate(r.date)}
     </li>`;
   });
   pendingAdds.forEach(a => {
     list.innerHTML += `<li class="text-success mb-1">
       <i class="bi bi-plus-circle"></i>
-      Add <strong>${a.name}</strong> to ${a.shift_type} on ${fmtDate(a.date)}
+      Add <strong>${a.shift_type}</strong> on ${fmtDate(a.date)}
     </li>`;
   });
+  if (IS_ADMIN) {
+    document.getElementById('confirm-intro').textContent = 'Save the following changes?';
+    document.getElementById('btn-confirm-label').textContent = 'Save changes';
+  } else {
+    document.getElementById('confirm-intro').textContent =
+      'Save the following shifts and send an email to the volunteer group?';
+    document.getElementById('btn-confirm-label').textContent = 'Save and notify group';
+  }
   new bootstrap.Modal(document.getElementById('confirmModal')).show();
 });
 
