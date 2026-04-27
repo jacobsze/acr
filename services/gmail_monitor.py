@@ -316,6 +316,22 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
         app.logger.error("Gmail monitor: failed to send summary email – %s", exc)
 
 
+_REG_DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]  # 0=Monday
+
+
+def _build_regular_schedules(volunteers):
+    """Return dict mapping volunteer email (lower) → list of 'Day SH' strings."""
+    from models import RegularSchedule
+    all_rs = RegularSchedule.query.filter(
+        RegularSchedule.user_id.in_([v.id for v in volunteers])
+    ).all()
+    result = {}
+    for rs in all_rs:
+        key = rs.user.email.lower()
+        result.setdefault(key, []).append(f"{_REG_DAY_ABBR[rs.day_of_week]} {rs.shift_type}")
+    return result
+
+
 def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
     """
     Fetch, parse, and apply a single Gmail message.
@@ -324,6 +340,7 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
     from services.llm_parser import parse_email_schedule_request
 
     volunteer_emails = {v.email.lower() for v in volunteers}
+    regular_schedules = _build_regular_schedules(volunteers)
     status = "no_action"
     error_msg = None
     parsed = {}
@@ -352,6 +369,7 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 email_body=content["body"],
                 email_from=content["from_email"],
                 volunteers=volunteers,
+                regular_schedules=regular_schedules,
             )
             parsed["_not_registered"] = True
             _send_summary_email(app, service, content, parsed, [{
@@ -368,6 +386,7 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 email_body=content["body"],
                 email_from=content["from_email"],
                 volunteers=volunteers,
+                regular_schedules=regular_schedules,
             )
 
             if parsed.get("error") and parsed.get("action") == "unknown":

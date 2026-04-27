@@ -13,11 +13,17 @@ Determine:
 1. Is this a schedule change request?
 2. Which volunteer is making the request? Match their name or email to the list above.
 3. What action: "add" (they want to pick up a shift) or "remove" (they want to drop a shift)?
-4. What date(s)? Convert relative expressions ("this Saturday", "next Tuesday") to YYYY-MM-DD.\
- If only a day of week is given with no specific date, assume the next upcoming occurrence of that day.\
- Future dates (weeks or months from now) are fully valid — process them as-is.\
- If multiple dates are mentioned, set "date" to a JSON array of all YYYY-MM-DD strings.
-5. Which shift: AM or PM?
+4. What date(s)?
+   - Convert relative expressions ("this Saturday", "next Tuesday") to YYYY-MM-DD.
+   - If only a day of week is given with no specific date, assume the next upcoming occurrence.
+   - Future dates (weeks or months from now) are fully valid — process them as-is.
+   - If the volunteer refers to "my shift", "my Friday", "my usual shift", etc., look up their\
+ regular weekly shifts in the volunteer list above and use those days to enumerate the\
+ specific dates. For example, if their regular shift is Friday AM and they say they can't\
+ make it from 6/8 to 7/25, enumerate every Friday in that inclusive range as the dates.
+   - If a date range is given, enumerate every matching shift date within that range.
+   - If multiple dates are affected, set "date" to a JSON array of all YYYY-MM-DD strings.
+5. Which shift: AM or PM? If derived from the volunteer's regular schedule, use that shift type.
 
 Coverage requests ("I can't make it", "can someone cover my shift?") should be treated as\
  action "remove" with confidence "low" — the volunteer wants to drop the shift but a human\
@@ -45,9 +51,14 @@ def parse_email_schedule_request(
     email_from: str,
     volunteers: list,
     today: date | None = None,
+    regular_schedules: dict | None = None,
 ) -> dict:
     """
     Ask Claude to parse an incoming email for a schedule change.
+
+    regular_schedules: optional dict mapping volunteer email (lowercase) to
+    a list of strings like ["Fri AM", "Tue PM"], used so Claude can resolve
+    "my shift" / day-range emails to exact dates.
 
     Returns a dict::
 
@@ -76,7 +87,12 @@ def parse_email_schedule_request(
     if today is None:
         today = date.today()
 
-    volunteer_list = "\n".join(f"- {v.name} ({v.email})" for v in volunteers)
+    reg = regular_schedules or {}
+    volunteer_list = "\n".join(
+        f"- {v.name} ({v.email})"
+        + (f": {', '.join(reg[v.email.lower()])}" if v.email.lower() in reg else ": no regular shifts on record")
+        for v in volunteers
+    )
     instructions = get_instructions()
 
     prompt = f"""\
@@ -86,7 +102,7 @@ Today's date: {today.strftime("%A, %B %d, %Y")}
 
 The shelter runs two shifts every day: AM and PM. Up to 3 volunteers per shift.
 
-Registered volunteers:
+Registered volunteers and their regular weekly shifts:
 {volunteer_list}
 
 An email arrived that may contain a schedule change request. Parse it:
