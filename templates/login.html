@@ -85,6 +85,12 @@ window.addEventListener('load', async function () {
     otpError.textContent = '';
   }
 
+  function isCaptchaError(e) {
+    const msg = ((e.errors && e.errors[0] && (e.errors[0].longMessage || e.errors[0].message)) || e.message || '').toLowerCase();
+    const code = (e.errors && e.errors[0] && e.errors[0].code) || '';
+    return msg.includes('captcha') || code.includes('captcha') || code.includes('bot_protection');
+  }
+
   sendBtn.addEventListener('click', async function () {
     emailError.textContent = '';
     const email = emailInput.value.trim();
@@ -106,7 +112,11 @@ window.addEventListener('load', async function () {
       }
       showOtpStep();
     } catch (e) {
-      emailError.textContent = (e.errors && e.errors[0]) ? e.errors[0].longMessage || e.errors[0].message : e.message;
+      if (isCaptchaError(e)) {
+        emailError.innerHTML = 'Security check failed to load. <a href="" onclick="location.reload();return false;">Reload the page</a> and try again.';
+      } else {
+        emailError.textContent = (e.errors && e.errors[0]) ? e.errors[0].longMessage || e.errors[0].message : e.message;
+      }
     } finally {
       sendBtn.disabled = false;
       sendBtn.textContent = 'Continue';
