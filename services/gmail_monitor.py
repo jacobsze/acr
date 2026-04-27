@@ -29,13 +29,14 @@ SCOPES = [
 
 def _get_service(app):
     """Return an authenticated Gmail API service object."""
+    import json as _json
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
 
     creds_file = app.config["GMAIL_CREDENTIALS_FILE"]
-    token_file = app.config["GMAIL_TOKEN_FILE"]
+    token_file = app.config.get("GMAIL_TOKEN_FILE", "")
 
     if not os.path.exists(creds_file):
         raise FileNotFoundError(
@@ -44,17 +45,29 @@ def _get_service(app):
         )
 
     creds = None
-    if os.path.exists(token_file):
+
+    # Prefer GMAIL_TOKEN_JSON env var (survives Render deploys) over token file
+    token_json_env = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
+    if token_json_env:
+        creds = Credentials.from_authorized_user_info(
+            _json.loads(token_json_env), SCOPES
+        )
+    elif token_file and os.path.exists(token_file):
         creds = Credentials.from_authorized_user_file(token_file, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            # Persist refreshed token back to file if available
+            if token_file:
+                with open(token_file, "w") as fh:
+                    fh.write(creds.to_json())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(creds_file, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open(token_file, "w") as fh:
-            fh.write(creds.to_json())
+            if token_file:
+                with open(token_file, "w") as fh:
+                    fh.write(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
 
