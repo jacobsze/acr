@@ -5,8 +5,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 
-WEEKLY_EMAIL_RECIPIENT       = "jacob.sze@gmail.com"
-OPEN_SHIFT_EMAIL_RECIPIENT   = "jacob.sze@gmail.com"
+WEEKLY_EMAIL_RECIPIENT       = "acrpetco86@googlegroups.com"
+OPEN_SHIFT_EMAIL_RECIPIENT   = "acrpetco86@googlegroups.com"
 CHANGE_NOTIFICATION_RECIPIENT = "jacob.sze@gmail.com"
 
 _AM_HDR  = "#b8cedd"
@@ -82,7 +82,12 @@ def _send_gmail(app, recipient, subject, html_body):
 # ── Weekly schedule email ─────────────────────────────────────────────────────
 
 def send_weekly_schedule_email(app):
-    """Build and send the 2-week schedule email."""
+    """Build and send the 2-week schedule email. Safe to call from background threads."""
+    with app.app_context():
+        return _send_weekly_schedule_email(app)
+
+
+def _send_weekly_schedule_email(app):
     from routes.schedule_routes import get_week_start, get_week_dates, build_schedule
     from zoneinfo import ZoneInfo
     from datetime import datetime
@@ -246,20 +251,9 @@ def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=Fal
                 f'</body></html>'
             )
 
-    if is_admin:
-        recipient = CHANGE_NOTIFICATION_RECIPIENT
-    else:
-        # Volunteer save — send to all active admins/owners
-        from models import User
-        admin_emails = [
-            u.email for u in
-            User.query.filter(User.active.is_(True), User.role.in_(["admin", "owner"])).all()
-        ]
-        recipient = ", ".join(admin_emails) if admin_emails else CHANGE_NOTIFICATION_RECIPIENT
-
-    _send_gmail(app, recipient, subject, html_body)
+    _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
     app.logger.info("Schedule change notification sent – %s", subject)
-    return {"recipient": recipient, "subject": subject}
+    return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}
 
 
 def check_and_send_open_shift_alert(app):

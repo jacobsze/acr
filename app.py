@@ -160,7 +160,7 @@ def _start_open_shift_cron(app: Flask) -> None:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
         from zoneinfo import ZoneInfo
-        from services.weekly_email import check_and_send_open_shift_alert
+        from services.weekly_email import check_and_send_open_shift_alert, send_weekly_schedule_email
 
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(
@@ -170,9 +170,16 @@ def _start_open_shift_cron(app: Flask) -> None:
             id="open_shift_alert",
             replace_existing=True,
         )
+        scheduler.add_job(
+            func=send_weekly_schedule_email,
+            args=[app],
+            trigger=CronTrigger(day_of_week="sun", hour=9, minute=0, timezone=ZoneInfo("America/New_York")),
+            id="weekly_schedule_email",
+            replace_existing=True,
+        )
         scheduler.start()
         app.email_scheduler = scheduler
-        app.logger.info("Open-shift alert cron started (10 am ET daily).")
+        app.logger.info("Email crons started (open-shift 10am ET daily, weekly schedule 9am ET Sundays).")
     except ImportError:
         app.logger.warning("APScheduler not installed – open-shift alert disabled.")
     except Exception as exc:

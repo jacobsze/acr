@@ -392,19 +392,22 @@ def bulk_save():
     db.session.commit()
 
     if successes:
-        try:
-            from services.weekly_email import send_schedule_change_email
-            send_schedule_change_email(
-                current_app._get_current_object(),
-                changed_by_name=g.user.name,
-                adds=applied_adds,
-                removes=applied_removes,
-                is_admin=is_admin,
-            )
-            flash(f"Schedule updated and email sent ({successes} change{'s' if successes != 1 else ''}).", "success")
-        except Exception as exc:
-            current_app.logger.warning("Change notification email failed: %s", exc)
-            flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}) — email send failed.", "warning")
+        if g.user.role == "owner":
+            flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}).", "success")
+        else:
+            try:
+                from services.weekly_email import send_schedule_change_email
+                send_schedule_change_email(
+                    current_app._get_current_object(),
+                    changed_by_name=g.user.name,
+                    adds=applied_adds,
+                    removes=applied_removes,
+                    is_admin=is_admin,
+                )
+                flash(f"Schedule updated and email sent ({successes} change{'s' if successes != 1 else ''}).", "success")
+            except Exception as exc:
+                current_app.logger.warning("Change notification email failed: %s", exc)
+                flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}) — email send failed.", "warning")
     for e in errors[:3]:
         flash(e, "error")
 
