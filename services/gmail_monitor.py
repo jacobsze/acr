@@ -378,9 +378,14 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 results = _apply_parsed(app, parsed, content, sender_email=content["from_email"],
                                         ignore_registration=ignore_registration)
                 status = "success" if any(r["status"] == "success" for r in results) else "no_action"
-                # Reply when a change was made, Claude flagged low confidence, or
-                # couldn't classify the email at all (owner should review manually)
+                # Reply when a change was made, Claude flagged low confidence,
+                # couldn't classify the email, or an action was attempted but failed
+                # (not_found, at_capacity) so the owner can handle it manually.
+                needs_owner_review = any(
+                    r["status"] in ("not_found", "at_capacity") for r in results
+                )
                 if (any(r["status"] in ("success", "low_confidence") for r in results)
+                        or needs_owner_review
                         or parsed.get("action") == "unknown"):
                     _send_summary_email(app, service, content, parsed, results)
 
