@@ -381,6 +381,45 @@ def _build_upcoming_schedules(volunteers, today=None):
     return result
 
 
+def _resolve_date_range(parsed, upcoming_schedules):
+    """
+    If parsed contains a date_range, intersect it with the volunteer's upcoming
+    schedule and return the matching dates as a list of YYYY-MM-DD strings.
+    Returns None if no matching dates are found or if date_range is absent.
+    """
+    from datetime import date as _date
+
+    date_range = parsed.get("date_range")
+    if not date_range:
+        return None
+
+    vol_email = (parsed.get("volunteer_email") or "").lower()
+    shift_type = parsed.get("shift_type")
+
+    try:
+        start = _date.fromisoformat(date_range["start"])
+        end = _date.fromisoformat(date_range["end"])
+    except (KeyError, ValueError, TypeError):
+        return None
+
+    vol_shifts = upcoming_schedules.get(vol_email, [])
+    matching = []
+    for entry in vol_shifts:
+        # entry format: "YYYY-MM-DD SH"
+        parts = entry.split()
+        if len(parts) != 2:
+            continue
+        try:
+            d = _date.fromisoformat(parts[0])
+        except ValueError:
+            continue
+        st = parts[1]
+        if start <= d <= end and (shift_type is None or st == shift_type):
+            matching.append(parts[0])
+
+    return matching or None
+
+
 def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
     """
     Fetch, parse, and apply a single Gmail message.
@@ -420,6 +459,10 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 volunteers=volunteers,
                 upcoming_schedules=upcoming_schedules,
             )
+            if parsed.get("date_range") and not parsed.get("date"):
+                resolved = _resolve_date_range(parsed, upcoming_schedules)
+                if resolved:
+                    parsed["date"] = resolved
             parsed["_not_registered"] = True
             _send_summary_email(app, service, content, parsed, [{
                 "status": "not_registered",
@@ -437,6 +480,10 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 volunteers=volunteers,
                 upcoming_schedules=upcoming_schedules,
             )
+            if parsed.get("date_range") and not parsed.get("date"):
+                resolved = _resolve_date_range(parsed, upcoming_schedules)
+                if resolved:
+                    parsed["date"] = resolved
 
             if parsed.get("error") and parsed.get("action") == "unknown":
                 # LLM/API-level error — treat as failed
