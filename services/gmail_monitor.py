@@ -316,19 +316,68 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
         app.logger.error("Gmail monitor: failed to send summary email – %s", exc)
 
 
-_REG_DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]  # 0=Monday
+def _build_upcoming_schedules(volunteers, today=None):
+    """
+    Return dict mapping volunteer email (lower) → sorted list of 'YYYY-MM-DD SH' strings
+    for the next 120 days.
 
+    Source of truth: ShiftAssignment for days that have been materialized; RegularSchedule
+    pattern for days that have not yet been materialized.
+    """
+    from models import ShiftAssignment, RegularSchedule
+    from datetime import date as _date, timedelta
 
-def _build_regular_schedules(volunteers):
-    """Return dict mapping volunteer email (lower) → list of 'Day SH' strings."""
-    from models import RegularSchedule
-    all_rs = RegularSchedule.query.filter(
-        RegularSchedule.user_id.in_([v.id for v in volunteers])
+    if today is None:
+        today = _date.today()
+    end_date = today + timedelta(days=120)
+    vol_ids = [v.id for v in volunteers]
+
+    # Volunteer-specific materialized assignments in range
+    vol_assignments = ShiftAssignment.query.filter(
+        ShiftAssignment.date >= today,
+        ShiftAssignment.date <= end_date,
+        ShiftAssignment.user_id.in_(vol_ids),
     ).all()
-    result = {}
+
+    # All materialized (date, shift_type) pairs in range — regardless of who's on them.
+    # If a shift has been written to the DB, ShiftAssignment is the source of truth;
+    # absence means the volunteer was removed / was never added after materialization.
+    materialized_keys = {
+        (row.date, row.shift_type)
+        for row in ShiftAssignment.query.filter(
+            ShiftAssignment.date >= today,
+            ShiftAssignment.date <= end_date,
+        ).with_entities(ShiftAssignment.date, ShiftAssignment.shift_type).distinct()
+    }
+
+    # Per-volunteer set of confirmed assignments
+    confirmed: dict[int, set] = {v.id: set() for v in volunteers}
+    for sa in vol_assignments:
+        confirmed[sa.user_id].add((sa.date, sa.shift_type))
+
+    # Regular schedule pattern (day_of_week 0=Mon … 6=Sun)
+    all_rs = RegularSchedule.query.filter(RegularSchedule.user_id.in_(vol_ids)).all()
+    regular_by_user: dict[int, list] = {v.id: [] for v in volunteers}
     for rs in all_rs:
-        key = rs.user.email.lower()
-        result.setdefault(key, []).append(f"{_REG_DAY_ABBR[rs.day_of_week]} {rs.shift_type}")
+        regular_by_user[rs.user_id].append((rs.day_of_week, rs.shift_type))
+
+    result = {}
+    for v in volunteers:
+        shifts: set[tuple] = set(confirmed[v.id])  # materialized & confirmed
+
+        # Fill in regular-schedule days that haven't been materialized yet
+        cur = today
+        while cur <= end_date:
+            dow = cur.weekday()  # 0=Monday
+            for (reg_dow, reg_st) in regular_by_user[v.id]:
+                if reg_dow == dow and (cur, reg_st) not in materialized_keys:
+                    shifts.add((cur, reg_st))
+            cur += timedelta(days=1)
+
+        result[v.email.lower()] = sorted(
+            f"{d.isoformat()} {st}" for (d, st) in shifts
+        )
+
     return result
 
 
@@ -340,7 +389,7 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
     from services.llm_parser import parse_email_schedule_request
 
     volunteer_emails = {v.email.lower() for v in volunteers}
-    regular_schedules = _build_regular_schedules(volunteers)
+    upcoming_schedules = _build_upcoming_schedules(volunteers)
     status = "no_action"
     error_msg = None
     parsed = {}
@@ -369,7 +418,7 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 email_body=content["body"],
                 email_from=content["from_email"],
                 volunteers=volunteers,
-                regular_schedules=regular_schedules,
+                upcoming_schedules=upcoming_schedules,
             )
             parsed["_not_registered"] = True
             _send_summary_email(app, service, content, parsed, [{
@@ -386,7 +435,7 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
                 email_body=content["body"],
                 email_from=content["from_email"],
                 volunteers=volunteers,
-                regular_schedules=regular_schedules,
+                upcoming_schedules=upcoming_schedules,
             )
 
             if parsed.get("error") and parsed.get("action") == "unknown":

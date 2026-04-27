@@ -17,11 +17,13 @@ Determine:
    - Convert relative expressions ("this Saturday", "next Tuesday") to YYYY-MM-DD.
    - If only a day of week is given with no specific date, assume the next upcoming occurrence.
    - Future dates (weeks or months from now) are fully valid — process them as-is.
-   - If the volunteer refers to "my shift", "my Friday", "my usual shift", etc., look up their\
- regular weekly shifts in the volunteer list above and use those days to enumerate the\
- specific dates. For example, if their regular shift is Friday AM and they say they can't\
- make it from 6/8 to 7/25, enumerate every Friday in that inclusive range as the dates.
-   - If a date range is given, enumerate every matching shift date within that range.
+   - Each volunteer's actual upcoming shift dates (next ~120 days) are listed next to their name\
+ as "YYYY-MM-DD SH" entries. These are the source of truth for their schedule.
+   - If the volunteer refers to "my shift", "my Friday", "my usual shift", or gives a date range,\
+ select all entries from their upcoming shift list that fall within the stated range or match\
+ the stated day/shift. Return those exact dates — do not invent or guess dates.
+   - If a date range is given, return every entry from the volunteer's upcoming shift list that\
+ falls within that inclusive range.
    - If multiple dates are affected, set "date" to a JSON array of all YYYY-MM-DD strings.
 5. Which shift: AM or PM? If derived from the volunteer's regular schedule, use that shift type.
 
@@ -51,14 +53,15 @@ def parse_email_schedule_request(
     email_from: str,
     volunteers: list,
     today: date | None = None,
-    regular_schedules: dict | None = None,
+    upcoming_schedules: dict | None = None,
 ) -> dict:
     """
     Ask Claude to parse an incoming email for a schedule change.
 
-    regular_schedules: optional dict mapping volunteer email (lowercase) to
-    a list of strings like ["Fri AM", "Tue PM"], used so Claude can resolve
-    "my shift" / day-range emails to exact dates.
+    upcoming_schedules: optional dict mapping volunteer email (lowercase) to
+    a sorted list of 'YYYY-MM-DD SH' strings representing their actual upcoming
+    shifts (materialized assignments + regular-schedule fallback). Used so Claude
+    can resolve "my shift" / day-range emails to exact confirmed dates.
 
     Returns a dict::
 
@@ -87,10 +90,10 @@ def parse_email_schedule_request(
     if today is None:
         today = date.today()
 
-    reg = regular_schedules or {}
+    sched = upcoming_schedules or {}
     volunteer_list = "\n".join(
         f"- {v.name} ({v.email})"
-        + (f": {', '.join(reg[v.email.lower()])}" if v.email.lower() in reg else ": no regular shifts on record")
+        + (f": {', '.join(sched[v.email.lower()])}" if v.email.lower() in sched else ": no upcoming shifts on record")
         for v in volunteers
     )
     instructions = get_instructions()
@@ -102,7 +105,7 @@ Today's date: {today.strftime("%A, %B %d, %Y")}
 
 The shelter runs two shifts every day: AM and PM. Up to 3 volunteers per shift.
 
-Registered volunteers and their regular weekly shifts:
+Registered volunteers and their upcoming scheduled shifts (next ~120 days, format: YYYY-MM-DD SH):
 {volunteer_list}
 
 An email arrived that may contain a schedule change request. Parse it:
