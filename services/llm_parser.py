@@ -13,8 +13,10 @@ Determine:
 1. Is this a schedule change request?
 2. Which volunteer is making the request? Match their name or email to the list above.
 3. What action: "add" (they want to pick up a shift) or "remove" (they want to drop a shift)?
-4. What date? Convert relative expressions ("this Saturday", "next Tuesday") to YYYY-MM-DD.\
- If only a day of week is given with no specific date, assume the next upcoming occurrence of that day.
+4. What date(s)? Convert relative expressions ("this Saturday", "next Tuesday") to YYYY-MM-DD.\
+ If only a day of week is given with no specific date, assume the next upcoming occurrence of that day.\
+ Future dates (weeks or months from now) are fully valid — process them as-is.\
+ If multiple dates are mentioned, set "date" to a JSON array of all YYYY-MM-DD strings.
 5. Which shift: AM or PM?
 
 Coverage requests ("I can't make it", "can someone cover my shift?") should be treated as\
@@ -107,7 +109,7 @@ Respond with ONLY a JSON object — no markdown, no extra text:
 {{
   "action": "add" | "remove" | "unknown",
   "volunteer_email": "matched@email.com" | null,
-  "date": "YYYY-MM-DD" | null,
+  "date": "YYYY-MM-DD" | ["YYYY-MM-DD", "YYYY-MM-DD", ...] | null,
   "shift_type": "AM" | "PM" | null,
   "confidence": "high" | "medium" | "low",
   "reason": "one-sentence explanation"
