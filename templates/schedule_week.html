@@ -40,6 +40,7 @@
 </div>
 
 {# ── Schedule tables (2 weeks) ────────────────────────────────────────────── #}
+{% set is_owner = current_user and current_user.role == 'owner' %}
 {% for week_info in all_weeks %}
 <div class="mb-4 mx-auto sched-mobile-full" style="max-width:600px;">
   <div class="sched-week-hdr text-white text-center py-2 fw-bold">
@@ -69,7 +70,7 @@
         {% for shift_type in ['AM', 'PM'] %}
         {% set slot = week_info.schedule[d][shift_type] %}
         {% set vols = slot.volunteers %}
-        {% set is_past = (d < today) or (d == today and shift_type == 'AM' and now_hour >= 11) or (d == today and shift_type == 'PM' and now_hour >= 23) %}
+        {% if is_owner %}{% set is_past = false %}{% else %}{% set is_past = (d < today) or (d == today and shift_type == 'AM' and now_hour >= 11) or (d == today and shift_type == 'PM' and now_hour >= 23) %}{% endif %}
         <td class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if slot.count == 0 and d >= today %} sched-no-vol{% endif %}{% if is_past %} sched-past-shift{% endif %}">
 
           {% if is_admin_mode %}

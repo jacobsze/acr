@@ -192,7 +192,7 @@ def add_to_shift():
         flash("Invalid request.", "error")
         return redirect(url_for("schedule.home"))
 
-    if d < date.today():
+    if d < date.today() and g.user.role != "owner":
         flash("Cannot add to a past shift.", "error")
         return redirect(url_for("schedule.home"))
 
