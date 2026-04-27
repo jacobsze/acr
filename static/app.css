@@ -292,6 +292,24 @@ body {
   background: #b8d8b8;
   color: #333;
 }
+.home-shift-row {
+  min-height: 38px;
+  border-bottom: 1px solid rgba(0,0,0,.07);
+}
+.home-shift-row:last-child {
+  border-bottom: none;
+}
+.home-shift-date {
+  font-size: .88rem;
+  min-width: 68px;
+}
+.home-dash-card {
+  transition: border-color .15s, box-shadow .15s;
+}
+.home-dash-card:hover {
+  border-color: var(--acr-primary);
+  box-shadow: 0 2px 8px rgba(99,104,218,.15);
+}
 
 /* ── Past shift cells ───────────────────────────────────────────────────── */
 .sched-past-shift {

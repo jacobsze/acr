@@ -162,7 +162,24 @@ def home():
         if my_shifts:
             days.append({"date": d, "shifts": my_shifts})
 
-    return render_template("home.html", days=days, today=today, effective_user=g.effective_user)
+    my_regular = (
+        RegularSchedule.query
+        .filter_by(user_id=g.effective_user.id)
+        .order_by(RegularSchedule.day_of_week, RegularSchedule.shift_type)
+        .all()
+    )
+
+    # 0=Monday … 6=Sunday, matching RegularSchedule.day_of_week
+    reg_day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    return render_template(
+        "home.html",
+        days=days,
+        today=today,
+        effective_user=g.effective_user,
+        my_regular=my_regular,
+        reg_day_names=reg_day_names,
+    )
 
 
 @schedule_bp.route("/shifts/add", methods=["POST"])
