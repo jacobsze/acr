@@ -84,24 +84,14 @@
     <thead>
       <tr>
         <th class="regular-day-col"></th>
-        <th colspan="{{ cap }}" class="text-center sched-am-hdr fw-bold">AM Shift</th>
-        <th colspan="{{ cap }}" class="text-center sched-pm-hdr fw-bold">PM Shift</th>
-      </tr>
-      <tr>
-        <th class="regular-day-col"></th>
-        {% for shift_type in ['AM', 'PM'] %}
-          {% for slot_idx in range(cap) %}
-            <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.8rem;">
-              Spot {{ slot_idx + 1 }}
-            </th>
-          {% endfor %}
-        {% endfor %}
+        <th colspan="{{ cap }}" class="text-center sched-am-hdr fw-bold">AM</th>
+        <th colspan="{{ cap }}" class="text-center sched-pm-hdr fw-bold">PM</th>
       </tr>
     </thead>
     <tbody>
       {% for dow, day_name in days_display %}
       <tr>
-        <td class="fw-semibold regular-day-col">{{ day_name }}</td>
+        <td class="regular-day-col"><span class="regular-dow-label">{{ day_name }}</span></td>
         {% for shift_type in ['AM', 'PM'] %}
           {% set slot_vols = regular_by_slot.get((dow, shift_type), []) %}
           {% for slot_idx in range(cap) %}
