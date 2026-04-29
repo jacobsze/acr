@@ -9,7 +9,19 @@
       <h4 class="mt-2">Petco86 Volunteer Schedule</h4>
     </div>
 
-    {% if not config.CLERK_PUBLISHABLE_KEY %}
+    {% if config.LOCAL_TEST_MODE %}
+    <!-- Local test mode: simple email form -->
+    <form method="POST" action="{{ url_for('auth.login') }}">
+      <p class="text-muted text-center mb-3">Local test mode - enter any email</p>
+      <div class="mb-3">
+        <label class="form-label" for="email-input">Email address</label>
+        <input type="email" class="form-control" id="email-input" name="email"
+               placeholder="you@example.com" autofocus required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Sign In</button>
+    </form>
+
+    {% elif not config.CLERK_PUBLISHABLE_KEY %}
     <div class="alert alert-warning">
       <strong>Setup required:</strong> Add <code>CLERK_PUBLISHABLE_KEY</code> and
       <code>CLERK_SECRET_KEY</code> to your environment variables.
