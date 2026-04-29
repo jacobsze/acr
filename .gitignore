@@ -7,3 +7,5 @@ __pycache__/
 instance/
 .venv/
 venv/
+credentials.json
+token.json
