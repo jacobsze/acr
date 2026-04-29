@@ -48,3 +48,6 @@ class Config:
 
     # Business rules
     MAX_VOLUNTEERS_PER_SHIFT = 3
+
+    # Local testing mode (bypasses Clerk)
+    LOCAL_TEST_MODE = os.environ.get("LOCAL_TEST_MODE", "").lower() in ("1", "true", "yes")

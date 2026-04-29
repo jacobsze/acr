@@ -33,6 +33,18 @@ def get_current_user() -> User | None:
 
 
 def _resolve_clerk_user() -> User | None:
+    # For local testing: allow any email to log in
+    if current_app.config.get("LOCAL_TEST_MODE"):
+        from flask import session
+        email = session.get("_test_email")
+        if email:
+            user = User.query.filter_by(email=email, active=True).first()
+            if not user:
+                user = User(email=email, name="Test User", role="owner", active=True)
+                db.session.add(user)
+                db.session.commit()
+            return user
+
     secret_key = current_app.config.get("CLERK_SECRET_KEY", "")
     if not secret_key:
         return None
