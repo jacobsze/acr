@@ -40,7 +40,7 @@ def _resolve_clerk_user() -> User | None:
         if email:
             user = User.query.filter_by(email=email, active=True).first()
             if not user:
-                user = User(email=email, name="Test User", role="owner", active=True)
+                user = User(email=email, name="Test User", role="volunteer", active=True)
                 db.session.add(user)
                 db.session.commit()
             return user
