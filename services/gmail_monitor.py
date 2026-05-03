@@ -100,6 +100,23 @@ def _extract_content(msg: dict) -> dict:
         if data:
             body = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
 
+    # If from_email is a Google Group, extract volunteer name from subject or body
+    # Google Group emails have "From: Group Name <group@googlegroups.com>" or similar
+    sender_name = None
+    if "googlegroups.com" in from_email.lower():
+        # Try to extract actual sender from "On behalf of" or "From:" patterns in body
+        lines = body.split("\n")
+        for line in lines[:10]:  # Check first 10 lines
+            if "on behalf of" in line.lower():
+                # Extract name after "on behalf of"
+                parts = line.split("on behalf of")
+                if len(parts) > 1:
+                    sender_name = parts[1].strip().split("<")[0].strip()
+                    break
+            elif line.startswith("From:") or line.startswith("from:"):
+                sender_name = line.split(":", 1)[1].strip().split("<")[0].strip()
+                break
+
     # internalDate is epoch milliseconds (UTC) set by Gmail when it received the message
     sent_at = None
     try:
@@ -112,6 +129,7 @@ def _extract_content(msg: dict) -> dict:
     return {
         "subject": subject,
         "from_email": from_email,
+        "sender_name": sender_name,  # New field for Google Group emails
         "body": body,
         "message_id": message_id,
         "thread_id": msg.get("threadId", ""),
@@ -458,6 +476,16 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
         content = _extract_content(msg)
 
         sender = content["from_email"].lower()
+
+        # If email is from Google Group and we extracted a sender_name, try to match by name
+        if content.get("sender_name") and "googlegroups.com" in sender:
+            # Try to find volunteer by name
+            sender_name_lower = content["sender_name"].lower()
+            for vol in volunteers:
+                if vol["name"].lower() == sender_name_lower:
+                    sender = vol["email"].lower()
+                    break
+
         if sender not in volunteer_emails and not ignore_registration:
             app.logger.info(
                 "Gmail monitor: sender %s not a registered volunteer – running LLM for review only",
