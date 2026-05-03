@@ -49,7 +49,7 @@ def dashboard():
 
     recent_email_logs = (
         EmailProcessingLog.query
-        .order_by(EmailProcessingLog.processed_at.desc())
+        .order_by(EmailProcessingLog.sent_at.desc(), EmailProcessingLog.processed_at.desc())
         .limit(10)
         .all()
     )
@@ -416,7 +416,7 @@ def email_log():
 
     logs = (
         EmailProcessingLog.query
-        .order_by(EmailProcessingLog.processed_at.desc())
+        .order_by(EmailProcessingLog.sent_at.desc(), EmailProcessingLog.processed_at.desc())
         .limit(100)
         .all()
     )
