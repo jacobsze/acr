@@ -1,7 +1,27 @@
-from flask import Blueprint, redirect, render_template, url_for, request, session, current_app
+from flask import Blueprint, redirect, render_template, url_for, request, session, current_app, jsonify
 from auth_utils import get_current_user
+from models import User
 
 auth_bp = Blueprint("auth", __name__)
+
+
+@auth_bp.route("/check-email", methods=["POST"])
+def check_email():
+    """Check if an email is registered as a volunteer. Used before Clerk verification."""
+    email = request.json.get("email", "").strip().lower()
+
+    if not email:
+        return jsonify({"registered": False, "error": "Email required"}), 400
+
+    user = User.query.filter_by(email=email, active=True).first()
+
+    if user:
+        return jsonify({"registered": True})
+    else:
+        return jsonify({
+            "registered": False,
+            "error": f"Email {email} is not registered. Please contact the administrator to be added to the volunteer list."
+        })
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])

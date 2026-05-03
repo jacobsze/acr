@@ -107,7 +107,31 @@ window.addEventListener('load', async function () {
     emailError.textContent = '';
     const email = emailInput.value.trim();
     if (!email) { emailError.textContent = 'Please enter your email.'; return; }
+
+    // Check if email is registered before Clerk sends verification
     sendBtn.disabled = true;
+    sendBtn.textContent = 'Checking…';
+    try {
+      const checkResp = await fetch('/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const checkData = await checkResp.json();
+      if (!checkData.registered) {
+        emailError.textContent = checkData.error || 'Email not registered.';
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Continue';
+        return;
+      }
+    } catch (e) {
+      console.error('Error checking email:', e);
+      emailError.textContent = 'Error checking registration. Please try again.';
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Continue';
+      return;
+    }
+
     sendBtn.textContent = 'Sending…';
     try {
       try {
