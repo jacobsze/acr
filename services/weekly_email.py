@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 
 WEEKLY_EMAIL_RECIPIENT       = "acrpetco86@googlegroups.com"
 OPEN_SHIFT_EMAIL_RECIPIENT   = "acrpetco86@googlegroups.com"
-CHANGE_NOTIFICATION_RECIPIENT = "jacob.sze@gmail.com"
+CHANGE_NOTIFICATION_RECIPIENT = "acrpetco86@googlegroups.com"
 
 _AM_HDR  = "#b8cedd"
 _PM_HDR  = "#b8d8b8"
