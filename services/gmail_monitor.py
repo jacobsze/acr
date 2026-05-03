@@ -283,9 +283,11 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
 
 
 def _send_summary_email(app, service, content, parsed, results, processing_error=None):
-    """Reply to the original email thread with a processing summary for the owner."""
+    """Reply to the original email thread with a processing summary for the owner.
+    Also sends to volunteer group if there were successful schedule changes."""
     owner_email = app.config.get("OWNER_EMAIL", "")
     monitor_email = app.config.get("GMAIL_MONITOR_EMAIL", "")
+    group_email = "acrpetco86@googlegroups.com"
     if not owner_email:
         return
 
@@ -299,6 +301,7 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
         "low_confidence": "⚠️",
     }
     lines = []
+    any_success = False
     if processing_error:
         lines.append(f"⚠️ Error during processing — please handle manually:")
         lines.append(f"   {processing_error}")
@@ -326,7 +329,11 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
     reply_subject = original_subject if original_subject.lower().startswith("re:") else f"Re: {original_subject}"
 
     msg = MIMEText(body)
-    msg["to"] = owner_email
+    # Send to both owner and group if successful changes, else just owner
+    if any_success:
+        msg["to"] = f"{owner_email}, {group_email}"
+    else:
+        msg["to"] = owner_email
     msg["from"] = monitor_email
     msg["subject"] = reply_subject
 
