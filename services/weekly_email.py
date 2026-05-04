@@ -76,7 +76,12 @@ def _send_gmail(app, recipient, subject, html_body):
     msg["subject"] = subject
     msg.attach(MIMEText(html_body, "html"))
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    try:
+        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        app.logger.info("Email sent successfully to %s: %s", recipient, subject)
+    except Exception as e:
+        app.logger.error("Failed to send email to %s: %s", recipient, str(e), exc_info=True)
+        raise
 
 
 # ── Weekly schedule email ─────────────────────────────────────────────────────

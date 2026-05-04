@@ -406,7 +406,7 @@ def bulk_save():
                 )
                 flash(f"Schedule updated and email sent ({successes} change{'s' if successes != 1 else ''}).", "success")
             except Exception as e:
-                current_app.logger.exception("Change notification email failed")
+                current_app.logger.exception("Change notification email failed: %s", str(e))
                 flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}).", "success")
     for e in errors[:3]:
         flash(e, "error")
