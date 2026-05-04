@@ -87,7 +87,7 @@ def volunteers():
         db.session.query(ShiftAssignment.user_id, func.count(ShiftAssignment.id))
         .filter(
             ShiftAssignment.date >= today,
-            ShiftAssignment.date <= today + timedelta(days=7),
+            ShiftAssignment.date < today + timedelta(days=14),
         )
         .group_by(ShiftAssignment.user_id)
         .all()
