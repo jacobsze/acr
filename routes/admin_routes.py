@@ -49,7 +49,7 @@ def dashboard():
 
     recent_email_logs = (
         EmailProcessingLog.query
-        .order_by(EmailProcessingLog.sent_at.desc(), EmailProcessingLog.processed_at.desc())
+        .order_by(func.coalesce(EmailProcessingLog.sent_at, EmailProcessingLog.processed_at).desc())
         .limit(10)
         .all()
     )
@@ -412,11 +412,12 @@ def reprocess_email(log_id):
 def email_log():
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
+    from sqlalchemy import func
     NY = ZoneInfo("America/New_York")
 
     logs = (
         EmailProcessingLog.query
-        .order_by(EmailProcessingLog.sent_at.desc(), EmailProcessingLog.processed_at.desc())
+        .order_by(func.coalesce(EmailProcessingLog.sent_at, EmailProcessingLog.processed_at).desc())
         .limit(100)
         .all()
     )
