@@ -87,7 +87,7 @@ def _send_gmail(app, recipient, subject, html_body):
 # ── Weekly schedule email ─────────────────────────────────────────────────────
 
 def send_weekly_schedule_email(app):
-    """Build and send the 2-week schedule email. Safe to call from background threads."""
+    """Build and send the 3-week schedule email. Safe to call from background threads."""
     with app.app_context():
         return _send_weekly_schedule_email(app)
 
@@ -102,7 +102,7 @@ def _send_weekly_schedule_email(app):
     week_start = get_week_start(today)
 
     all_weeks = []
-    for i in range(2):
+    for i in range(3):
         ws = week_start + timedelta(weeks=i)
         wd = get_week_dates(ws)
         all_weeks.append({
@@ -113,10 +113,11 @@ def _send_weekly_schedule_email(app):
         })
 
     start_label = week_start.strftime("%b %-d")
-    end_label   = (week_start + timedelta(days=13)).strftime("%b %-d")
+    end_label   = (week_start + timedelta(days=20)).strftime("%b %-d")
     subject     = f"ACR Schedule for {start_label} - {end_label}"
 
     app_url = "https://acr-schedule.onrender.com/"
+    public_schedule_url = "https://acr-schedule.onrender.com/schedule/public"
     procedures_url = (
         "https://docs.google.com/document/d/e/"
         "2PACX-1vQv4SN1q_8k4F51oN3MmrDqv1CYDIZ1cowAdF7YwmURoUp1lVa40yin52SDs6k1Gn83WtkdA8iH42wi"
@@ -124,9 +125,12 @@ def _send_weekly_schedule_email(app):
     )
     table_html = _build_table(all_weeks)
     html_body = f"""<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">
-<p>Access the <a href="{app_url}">schedule</a><br>
-<a href="{procedures_url}">Volunteer Procedures</a></p>
-<p>Here is the schedule for the next two weeks:</p>
+<p>
+<a href="{app_url}">Access the app</a><br>
+<a href="{public_schedule_url}">Access the schedule</a><br>
+<a href="{procedures_url}">Volunteer Procedures</a>
+</p>
+<p>Here is the schedule for the next three weeks:</p>
 {table_html}
 </body></html>"""
 

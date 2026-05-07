@@ -123,6 +123,30 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
 
 # ── routes ────────────────────────────────────────────────────────────────────
 
+@schedule_bp.route("/public")
+def public_schedule():
+    """Public-facing 3-week schedule view."""
+    today = date.today()
+    week_start = get_week_start(today)
+
+    all_weeks = []
+    for i in range(3):
+        ws = week_start + timedelta(weeks=i)
+        wd = get_week_dates(ws)
+        all_weeks.append({
+            "week_start": ws,
+            "week_end": ws + timedelta(days=6),
+            "week_dates": wd,
+            "schedule": build_schedule(wd, None),
+        })
+
+    return render_template(
+        "schedule_public.html",
+        all_weeks=all_weeks,
+        today=today,
+    )
+
+
 @schedule_bp.route("/")
 @login_required
 def home():
