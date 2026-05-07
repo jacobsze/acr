@@ -213,6 +213,20 @@ def add_to_shift():
         changed_by_id=g.user.id,
     ))
     db.session.commit()
+
+    if g.user.role != "owner":
+        try:
+            from services.weekly_email import send_schedule_change_email
+            send_schedule_change_email(
+                current_app._get_current_object(),
+                changed_by_name=g.user.name,
+                adds=[{"date": d, "shift_type": shift_type}],
+                removes=[],
+                is_admin=False,
+            )
+        except Exception as e:
+            current_app.logger.exception("Change notification email failed: %s", str(e))
+
     flash(f"Added you to {shift_type} on {d.strftime('%b %-d')}.", "success")
     return redirect(url_for("schedule.home"))
 
@@ -241,6 +255,20 @@ def remove_from_shift():
         changed_by_id=g.user.id,
     ))
     db.session.commit()
+
+    if g.user.role != "owner":
+        try:
+            from services.weekly_email import send_schedule_change_email
+            send_schedule_change_email(
+                current_app._get_current_object(),
+                changed_by_name=g.user.name,
+                adds=[],
+                removes=[{"date": d, "shift_type": shift_type, "name": g.effective_user.name}],
+                is_admin=False,
+            )
+        except Exception as e:
+            current_app.logger.exception("Change notification email failed: %s", str(e))
+
     flash(f"Removed you from {shift_type} on {d.strftime('%b %-d')}.", "success")
     return redirect(url_for("schedule.home"))
 
