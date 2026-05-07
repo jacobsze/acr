@@ -117,7 +117,7 @@ def _send_weekly_schedule_email(app):
     subject     = f"ACR Schedule for {start_label} - {end_label}"
 
     app_url = "https://acr-schedule.onrender.com/"
-    public_schedule_url = "https://acr-schedule.onrender.com/schedule/public"
+    public_schedule_url = "https://acr-schedule.onrender.com/public"
     procedures_url = (
         "https://docs.google.com/document/d/e/"
         "2PACX-1vQv4SN1q_8k4F51oN3MmrDqv1CYDIZ1cowAdF7YwmURoUp1lVa40yin52SDs6k1Gn83WtkdA8iH42wi"
