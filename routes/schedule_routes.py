@@ -125,7 +125,7 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
 
 @schedule_bp.route("/public")
 def public_schedule():
-    """Public-facing 3-week schedule view."""
+    """Public-facing 3-week schedule view - no authentication required."""
     today = date.today()
     week_start = get_week_start(today)
 
