@@ -9,3 +9,4 @@ instance/
 venv/
 credentials.json
 token.json
+generate_token.py
