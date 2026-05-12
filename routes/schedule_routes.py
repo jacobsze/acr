@@ -94,6 +94,18 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
         key = (rs.day_of_week, rs.shift_type)
         regular_by_dow.setdefault(key, []).append(rs.user)
 
+    # Get removals from change log - volunteers who removed themselves from specific dates
+    removals = (
+        ScheduleChangeLog.query
+        .filter(
+            ScheduleChangeLog.date.in_(week_dates),
+            ScheduleChangeLog.action == "remove",
+            ScheduleChangeLog.log_type == "upcoming",
+        )
+        .all()
+    )
+    removed_set = {(r.date, r.shift_type, r.volunteer_id) for r in removals}
+
     cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
     schedule = {}
     for d in week_dates:
@@ -107,6 +119,12 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
             else:
                 volunteers = sorted(regular_by_dow.get((dow, shift_type), []), key=lambda u: u.name)
                 is_tentative = True
+
+            # Filter out volunteers who removed themselves from this specific date
+            volunteers = [
+                v for v in volunteers
+                if (d, shift_type, v.id) not in removed_set
+            ]
 
             schedule[d][shift_type] = {
                 "volunteers": volunteers,
