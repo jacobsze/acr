@@ -194,7 +194,7 @@ def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=Fal
         from routes.schedule_routes import build_schedule
 
         # Test volunteer emails go to owner only
-        if changed_by_email == "testvolunteer@gmail.com":
+        if changed_by_email == "testvolunteer@yopmail.com":
             recipient = "jacob.sze@gmail.com"
         else:
             recipient = CHANGE_NOTIFICATION_RECIPIENT
