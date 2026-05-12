@@ -188,10 +188,16 @@ def send_open_shift_alert(app, target_date, open_shifts):
     return {"recipient": OPEN_SHIFT_EMAIL_RECIPIENT, "subject": subject}
 
 
-def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=False):
+def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=False, changed_by_email=None):
     """Send a change-notification email with visual schedule table."""
     with app.app_context():
         from routes.schedule_routes import build_schedule
+
+        # Test volunteer emails go to owner only
+        if changed_by_email == "testvolunteer@gmail.com":
+            recipient = "jacob.sze@gmail.com"
+        else:
+            recipient = CHANGE_NOTIFICATION_RECIPIENT
 
         # Collect all affected dates
         affected_dates = set()
@@ -230,9 +236,9 @@ def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=Fal
 {table_html}
 </body></html>"""
 
-        _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
+        _send_gmail(app, recipient, subject, html_body)
         app.logger.info("Schedule change notification sent – %s", subject)
-        return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}
+        return {"recipient": recipient, "subject": subject}
 
 
 def _build_change_table(affected_dates, schedule):

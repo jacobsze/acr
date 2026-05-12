@@ -265,6 +265,7 @@ def add_to_shift():
                 adds=[{"date": d, "shift_type": shift_type}],
                 removes=[],
                 is_admin=False,
+                changed_by_email=g.user.email,
             )
         except Exception as e:
             current_app.logger.exception("Change notification email failed: %s", str(e))
@@ -307,6 +308,7 @@ def remove_from_shift():
                 adds=[],
                 removes=[{"date": d, "shift_type": shift_type, "name": g.effective_user.name}],
                 is_admin=False,
+                changed_by_email=g.user.email,
             )
         except Exception as e:
             current_app.logger.exception("Change notification email failed: %s", str(e))
@@ -473,6 +475,7 @@ def bulk_save():
                     adds=applied_adds,
                     removes=applied_removes,
                     is_admin=is_admin,
+                    changed_by_email=g.user.email,
                 )
                 flash(f"Schedule updated and email sent ({successes} change{'s' if successes != 1 else ''}).", "success")
             except Exception as e:
