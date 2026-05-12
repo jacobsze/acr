@@ -189,34 +189,77 @@ def send_open_shift_alert(app, target_date, open_shifts):
 
 
 def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin=False):
-    """Send a change-notification email listing which shifts were added or removed."""
+    """Send a change-notification email with visual schedule table."""
+    with app.app_context():
+        from routes.schedule_routes import build_schedule
 
-    def _fmt(d):
-        return d.strftime("%a %-m/%-d")
+        # Collect all affected dates
+        affected_dates = set()
+        for a in adds:
+            affected_dates.add(a["date"])
+        for r in removes:
+            affected_dates.add(r["date"])
 
-    subject = f"{changed_by_name} updated the schedule"
-    rows = []
-    for a in adds:
-        rows.append(
-            f'<li style="margin-bottom:6px;">'
-            f'Added the <strong>{_fmt(a["date"])} {a["shift_type"]}</strong> shift</li>'
+        affected_dates = sorted(affected_dates)
+        total_changes = len(adds) + len(removes)
+
+        # Build subject line
+        if total_changes == 1:
+            if adds:
+                a = adds[0]
+                subject = f"{changed_by_name} was added to the {a['date'].strftime('%-m/%-d')} {a['shift_type']} shift"
+            else:
+                r = removes[0]
+                subject = f"{changed_by_name} was removed from the {r['date'].strftime('%-m/%-d')} {r['shift_type']} shift"
+        else:
+            # Multiple changes - list them
+            change_list = []
+            for a in adds:
+                change_list.append(f"Added {a['date'].strftime('%-m/%-d')} {a['shift_type']}")
+            for r in removes:
+                change_list.append(f"Removed {r['date'].strftime('%-m/%-d')} {r['shift_type']}")
+            subject = f"{changed_by_name} updated the schedule ({', '.join(change_list)})"
+
+        # Build schedule table
+        schedule = build_schedule(affected_dates, None)
+
+        table_html = _build_change_table(affected_dates, schedule)
+
+        html_body = f"""<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">
+<p><strong>{subject}</strong></p>
+{table_html}
+</body></html>"""
+
+        _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
+        app.logger.info("Schedule change notification sent – %s", subject)
+        return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}
+
+
+def _build_change_table(affected_dates, schedule):
+    """Build a table showing AM/PM shifts for affected dates."""
+    rows = [
+        '<table style="border-collapse:collapse; font-family:Arial,Helvetica,sans-serif;'
+        ' font-size:14px; width:520px; max-width:100%;">',
+        f'<tr>'
+        f'<td style="{_TD_BASE} width:25%;"></td>'
+        f'<td style="{_TD_BASE} width:37.5%; background:{_AM_HDR}; font-weight:bold; text-align:center;">AM</td>'
+        f'<td style="{_TD_BASE} width:37.5%; background:{_PM_HDR}; font-weight:bold; text-align:center;">PM</td>'
+        f'</tr>',
+    ]
+
+    for d in affected_dates:
+        sched = schedule[d]
+        am_names = [u.name for u in sched["AM"]["volunteers"]]
+        pm_names = [u.name for u in sched["PM"]["volunteers"]]
+
+        date_cell = (
+            f'<td style="{_TD_BASE} white-space:nowrap; font-size:0.85em;">'
+            f'{d.strftime("%A")}<br>{d.strftime("%-m/%-d/%Y")}</td>'
         )
-    for r in removes:
-        rows.append(
-            f'<li style="margin-bottom:6px;">'
-            f'Removed from the <strong>{_fmt(r["date"])} {r["shift_type"]}</strong> shift</li>'
-        )
+        rows.append(f"<tr>{date_cell}{_cell(am_names, _AM_CELL)}{_cell(pm_names, _PM_CELL)}</tr>")
 
-    html_body = (
-        f'<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">'
-        f'<p><strong>{changed_by_name}</strong> has made an update to the schedule:</p>'
-        f'<ul style="padding-left:20px;">{"".join(rows)}</ul>'
-        f'</body></html>'
-    )
-
-    _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
-    app.logger.info("Schedule change notification sent – %s", subject)
-    return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}
+    rows.append("</table>")
+    return "\n".join(rows)
 
 
 def check_and_send_open_shift_alert(app):
