@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Cat Email Analysis – Petco86 Volunteer Schedule{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-lg-10">
+      <h1>Cat Email Analysis</h1>
+      <p class="text-muted">Testing Claude Vision analysis on volunteer emails (sample of 5 emails)</p>
+
+      <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">Token Usage Summary</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <div class="stat">
+                <div class="stat-value">{{ result.total_emails }}</div>
+                <div class="stat-label">Emails Analyzed</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="stat">
+                <div class="stat-value">{{ result.total_input_tokens|default(0)|format_number }}</div>
+                <div class="stat-label">Input Tokens</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="stat">
+                <div class="stat-value">{{ result.total_output_tokens|default(0)|format_number }}</div>
+                <div class="stat-label">Output Tokens</div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="stat">
+                <div class="stat-value">${{ "%.4f"|format(result.total_cost) }}</div>
+                <div class="stat-label">Total Cost</div>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="row">
+            <div class="col-md-4">
+              <strong>Average per email:</strong>
+              <br>${{ "%.6f"|format(avg_cost_per_email) }}
+            </div>
+            <div class="col-md-4">
+              <strong>Weekly estimate (20 emails):</strong>
+              <br>${{ "%.4f"|format(avg_cost_per_email * 20) }}
+            </div>
+            <div class="col-md-4">
+              <strong>Monthly estimate (80 emails):</strong>
+              <br>${{ "%.4f"|format(avg_cost_per_email * 80) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Analysis Results</h5>
+        </div>
+        <div class="card-body">
+          {% if result.results %}
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Volunteer</th>
+                    <th>Cats Found</th>
+                    <th>Tokens</th>
+                    <th>Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in result.results %}
+                  <tr>
+                    <td>{{ r.date.strftime('%-m/%-d') if r.date else '—' }}</td>
+                    <td><small>{{ r.volunteer }}</small></td>
+                    <td>
+                      {% if r.cats %}
+                        {% for cat in r.cats %}
+                          <span class="badge bg-info">{{ cat.name }}</span>
+                        {% endfor %}
+                      {% else %}
+                        <span class="text-muted">—</span>
+                      {% endif %}
+                    </td>
+                    <td><small>{{ r.input_tokens }} + {{ r.output_tokens }}</small></td>
+                    <td>${{ "%.6f"|format(r.cost) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted">No results to display.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="mt-4 mb-4">
+        <p class="text-muted small">
+          <strong>Note:</strong> This is a sample analysis. Costs are based on Claude 3.5 Sonnet pricing:
+          $3 per 1M input tokens, $15 per 1M output tokens.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.stat {
+  text-align: center;
+  padding: 1rem;
+}
+.stat-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #0d6efd;
+}
+.stat-label {
+  font-size: 0.9rem;
+  color: #666;
+  text-transform: uppercase;
+}
+</style>
+
+{% endblock %}

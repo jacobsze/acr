@@ -24,6 +24,31 @@ def normalize_phone(raw: str) -> tuple[str, str]:
     return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}", ""
 
 
+# ── Cat logs ──────────────────────────────────────────────────────────────────
+
+@admin_bp.route("/analyze-cat-emails", methods=["GET"])
+@owner_required
+def analyze_cat_emails():
+    """Analyze past emails to extract cat information and show token costs."""
+    from services.cat_analyzer import analyze_emails_for_cats
+
+    try:
+        # Analyze past 3 weeks, sample 5 for testing
+        result = analyze_emails_for_cats(current_app._get_current_object(), days_back=21, sample_size=5)
+
+        avg_cost = result['total_cost'] / result['total_emails'] if result['total_emails'] > 0 else 0
+
+        return render_template(
+            "admin_cat_analysis.html",
+            result=result,
+            avg_cost_per_email=avg_cost,
+        )
+    except Exception as e:
+        flash(f"Analysis failed: {str(e)}", "error")
+        current_app.logger.exception("Cat email analysis failed: %s", str(e))
+        return redirect(url_for("admin.dashboard"))
+
+
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/")

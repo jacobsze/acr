@@ -122,3 +122,51 @@ class EmailProcessingLog(db.Model):
     error_message = db.Column(db.Text, nullable=True)
     sent_at = db.Column(db.DateTime, nullable=True)     # when the email was sent (from internalDate)
     processed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class Cat(db.Model):
+    """Individual cat in the shelter."""
+
+    __tablename__ = "cats"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    status = db.Column(db.String(50), nullable=False, default="at_shelter")  # at_shelter | adopted | transferred | other
+    last_seen_date = db.Column(db.Date, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    logs = db.relationship("CatLog", back_populates="cat", cascade="all, delete-orphan")
+
+
+class CatLog(db.Model):
+    """Historical log entry for a cat."""
+
+    __tablename__ = "cat_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cat_id = db.Column(db.Integer, db.ForeignKey("cats.id"), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    notes = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(50), nullable=True)  # current status mentioned in this log
+    volunteer_name = db.Column(db.String(100), nullable=True)
+    email_message_id = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    cat = db.relationship("Cat", back_populates="logs")
+    photos = db.relationship("CatPhoto", back_populates="log", cascade="all, delete-orphan")
+
+
+class CatPhoto(db.Model):
+    """Photo attached to a cat log entry."""
+
+    __tablename__ = "cat_photos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cat_log_id = db.Column(db.Integer, db.ForeignKey("cat_logs.id"), nullable=False, index=True)
+    filename = db.Column(db.String(200), nullable=True)
+    data = db.Column(db.LargeBinary, nullable=True)  # base64 encoded image data
+    mime_type = db.Column(db.String(50), nullable=True)  # e.g. image/jpeg
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    log = db.relationship("CatLog", back_populates="photos")
