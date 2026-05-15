@@ -88,9 +88,9 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                     continue
 
                 content = first_block.text
-                app.logger.info(f"  Claude response length: {len(content)}")
+                app.logger.warning(f"  [DEBUG] Claude response length: {len(content)}")
                 if content:
-                    app.logger.info(f"  Claude response: {content[:500]}")
+                    app.logger.warning(f"  [DEBUG] Claude response: {content[:500]}")
                 else:
                     app.logger.warning(f"  ✗ Response text is empty string")
                     continue
