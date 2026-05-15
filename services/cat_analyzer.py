@@ -22,13 +22,12 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
     with app.app_context():
         from models import EmailProcessingLog
 
-        # Get emails from past N days
+        # Get emails from past N days - include all emails, not just "success" status
         cutoff_date = datetime.utcnow() - timedelta(days=days_back)
         emails = (
             EmailProcessingLog.query
             .filter(
                 EmailProcessingLog.processed_at >= cutoff_date,
-                EmailProcessingLog.status == "success",
                 EmailProcessingLog.body_snippet.isnot(None),
             )
             .order_by(EmailProcessingLog.processed_at.desc())
