@@ -22,13 +22,13 @@
             </div>
             <div class="col-md-3">
               <div class="stat">
-                <div class="stat-value">{{ result.total_input_tokens|default(0)|format_number }}</div>
+                <div class="stat-value">{{ "{:,}".format(result.total_input_tokens) }}</div>
                 <div class="stat-label">Input Tokens</div>
               </div>
             </div>
             <div class="col-md-3">
               <div class="stat">
-                <div class="stat-value">{{ result.total_output_tokens|default(0)|format_number }}</div>
+                <div class="stat-value">{{ "{:,}".format(result.total_output_tokens) }}</div>
                 <div class="stat-label">Output Tokens</div>
               </div>
             </div>
