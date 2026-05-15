@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Cats – Petco86 Volunteer Schedule{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-lg-10">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h1>Cats at the Shelter</h1>
+        <a href="{{ url_for('admin.analyze_cat_emails') }}" class="btn btn-sm btn-secondary">Re-analyze Emails</a>
+      </div>
+
+      {% if cats %}
+        <div class="card">
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead class="table-light">
+                  <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Last Seen</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for cat in cats %}
+                  <tr>
+                    <td>
+                      <strong>{{ cat.name }}</strong>
+                    </td>
+                    <td>
+                      <span class="badge bg-info">{{ cat.status }}</span>
+                    </td>
+                    <td>
+                      {% if cat.last_seen_date %}
+                        {{ cat.last_seen_date.strftime('%m/%d/%Y') }}
+                      {% else %}
+                        <span class="text-muted">—</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      <a href="{{ url_for('admin.cat_detail', cat_id=cat.id) }}" class="btn btn-sm btn-outline-primary">View History</a>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="alert alert-info">
+          <p>No cats have been logged yet. <a href="{{ url_for('admin.analyze_cat_emails') }}">Analyze emails</a> to extract and save cat information.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

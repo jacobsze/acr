@@ -12,7 +12,7 @@ client = Anthropic()
 def analyze_emails_for_cats(app, days_back=21, sample_size=None):
     """
     Analyze emails from the past N days to extract cat information.
-    Returns token usage and extracted cat data.
+    Stores results in Cat and CatLog models.
 
     Args:
         app: Flask app context
@@ -20,7 +20,8 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
         sample_size: If set, only analyze this many emails (for testing)
     """
     with app.app_context():
-        from models import EmailProcessingLog
+        from models import EmailProcessingLog, Cat, CatLog, db
+        from datetime import date
 
         # Get emails from past N days - skip schedule change emails (status=success)
         cutoff_date = datetime.utcnow() - timedelta(days=days_back)
@@ -38,12 +39,13 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
         if sample_size:
             emails = emails[:sample_size]
 
-        app.logger.info(f"Analyzing {len(emails)} emails from past {days_back} days...")
+        app.logger.info(f"[CAT_ANALYZER_V2] Analyzing {len(emails)} emails from past {days_back} days...")
 
         total_input_tokens = 0
         total_output_tokens = 0
         total_cost = 0
-        results = []
+        cats_processed = 0
+        cats_created = 0
 
         for i, email in enumerate(emails, 1):
             app.logger.info(f"[{i}/{len(emails)}] Analyzing: {email.subject}")
@@ -105,17 +107,50 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
 
                 try:
                     data = json.loads(content)
-                    results.append({
-                        "email_id": email.gmail_message_id,
-                        "date": email.sent_at,
-                        "volunteer": email.sender_email,
-                        "cats": data.get("cats", []),
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "cost": email_cost,
-                    })
-
                     cats = data.get("cats", [])
+
+                    # Save cats to database
+                    email_date = email.sent_at.date() if email.sent_at else date.today()
+                    for cat_data in cats:
+                        cat_name = cat_data.get("name", "").strip()
+                        if not cat_name:
+                            continue
+
+                        # Get or create cat
+                        cat = Cat.query.filter_by(name=cat_name).first()
+                        if not cat:
+                            cat = Cat(name=cat_name, status=cat_data.get("status", "at_shelter"))
+                            db.session.add(cat)
+                            db.session.flush()  # Get the ID
+                            cats_created += 1
+                            app.logger.info(f"    Created new cat: {cat_name}")
+                        else:
+                            # Update status if provided
+                            if cat_data.get("status"):
+                                cat.status = cat_data.get("status")
+
+                        # Create log entry
+                        log_entry = CatLog(
+                            cat_id=cat.id,
+                            date=email_date,
+                            notes=cat_data.get("notes", ""),
+                            status=cat_data.get("status", ""),
+                            volunteer_name=email.sender_email,
+                            email_message_id=email.gmail_message_id,
+                        )
+                        db.session.add(log_entry)
+                        cats_processed += 1
+
+                    # Update cat's last_seen_date
+                    if cats:
+                        for cat_data in cats:
+                            cat_name = cat_data.get("name", "").strip()
+                            if cat_name:
+                                cat = Cat.query.filter_by(name=cat_name).first()
+                                if cat:
+                                    cat.last_seen_date = email_date
+
+                    db.session.commit()
                     app.logger.info(f"  ✓ Found {len(cats)} cat(s): {[c.get('name') for c in cats]}")
 
                 except json.JSONDecodeError as e:
@@ -125,13 +160,15 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                 app.logger.exception(f"  Error analyzing email: {str(e)}")
 
         app.logger.info(f"Analysis complete. Total cost: ${total_cost:.4f}")
+        app.logger.info(f"Cats processed: {cats_processed}, Cats created: {cats_created}")
 
         return {
-            "total_emails": len(results),
+            "total_emails": len(emails),
             "total_input_tokens": total_input_tokens,
             "total_output_tokens": total_output_tokens,
             "total_cost": total_cost,
-            "results": results,
+            "cats_processed": cats_processed,
+            "cats_created": cats_created,
         }
 
 

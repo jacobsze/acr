@@ -6,7 +6,7 @@ from flask import (
 )
 from sqlalchemy import func
 
-from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog, AppSetting
+from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog, AppSetting, Cat, CatLog
 from auth_utils import login_required, admin_required, owner_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -29,24 +29,49 @@ def normalize_phone(raw: str) -> tuple[str, str]:
 @admin_bp.route("/analyze-cat-emails", methods=["GET"])
 @owner_required
 def analyze_cat_emails():
-    """Analyze past emails to extract cat information and show token costs."""
+    """Analyze past 3 weeks of emails to extract cat information and save to database."""
     from services.cat_analyzer import analyze_emails_for_cats
 
     try:
-        # Analyze past 3 weeks, sample 5 for testing
-        result = analyze_emails_for_cats(current_app._get_current_object(), days_back=21, sample_size=5)
-
-        avg_cost = result['total_cost'] / result['total_emails'] if result['total_emails'] > 0 else 0
+        # Analyze past 3 weeks and save all results to database
+        result = analyze_emails_for_cats(current_app._get_current_object(), days_back=21)
 
         return render_template(
             "admin_cat_analysis.html",
             result=result,
-            avg_cost_per_email=avg_cost,
         )
     except Exception as e:
         flash(f"Analysis failed: {str(e)}", "error")
         current_app.logger.exception("Cat email analysis failed: %s", str(e))
         return redirect(url_for("admin.dashboard"))
+
+
+@admin_bp.route("/cats", methods=["GET"])
+@admin_required
+def cats():
+    """View all cats with their current status and last seen date."""
+    all_cats = Cat.query.order_by(Cat.name).all()
+
+    return render_template(
+        "admin_cats.html",
+        cats=all_cats,
+    )
+
+
+@admin_bp.route("/cats/<int:cat_id>", methods=["GET"])
+@admin_required
+def cat_detail(cat_id):
+    """View detailed history for a specific cat."""
+    cat = Cat.query.get_or_404(cat_id)
+
+    # Get all logs for this cat, ordered by date descending
+    logs = CatLog.query.filter_by(cat_id=cat_id).order_by(CatLog.date.desc()).all()
+
+    return render_template(
+        "admin_cat_detail.html",
+        cat=cat,
+        logs=logs,
+    )
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
