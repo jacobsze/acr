@@ -22,13 +22,14 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
     with app.app_context():
         from models import EmailProcessingLog
 
-        # Get emails from past N days - include all emails, not just "success" status
+        # Get emails from past N days - skip schedule change emails (status=success)
         cutoff_date = datetime.utcnow() - timedelta(days=days_back)
         emails = (
             EmailProcessingLog.query
             .filter(
                 EmailProcessingLog.processed_at >= cutoff_date,
                 EmailProcessingLog.body_snippet.isnot(None),
+                EmailProcessingLog.status != "success",  # Skip schedule change emails
             )
             .order_by(EmailProcessingLog.processed_at.desc())
             .all()
@@ -114,7 +115,7 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
 def _extract_cat_data(app, email_data):
     """Use Claude to extract cat information from an email."""
 
-    prompt = f"""You are analyzing a volunteer email to extract information about cats mentioned.
+    prompt = f"""You are analyzing a volunteer shift report email to extract information about cats mentioned.
 
 EMAIL:
 Subject: {email_data['subject']}
@@ -126,25 +127,39 @@ Body:
 
 ---
 
-Extract information about any cats mentioned in this email. For each cat, identify:
-- Name/identifier
-- Current status (at_shelter, adopted, transferred, healthy, sick, injured, etc.)
-- Any relevant notes about their condition or behavior
+Your task: Extract every cat mentioned in this email, including casual references.
 
-Return ONLY a JSON object in this exact format, with no additional text:
+Look for:
+- Direct mentions: "Maria", "TG", "Kiki", etc.
+- Activity mentions: "played with TG", "fed Maria", "Maria ate well"
+- Status mentions: "SP was calm", "Kiki watched from below"
+- Any proper nouns that refer to individual cats
+
+For each cat found:
+1. Name/identifier (as the cat is called)
+2. Status/condition (healthy, calm, playful, eating well, etc.)
+3. Any notes (what they were doing, observations)
+
+Return ONLY valid JSON, no other text:
 {{
   "cats": [
     {{
-      "name": "cat name or identifier",
-      "status": "status description",
-      "notes": "any relevant details"
+      "name": "cat name",
+      "status": "observed status or condition",
+      "notes": "activities or observations"
     }}
   ]
 }}
 
 If no cats are mentioned, return: {{"cats": []}}
 
-Do not include any text before or after the JSON."""
+Example: If email says "played with TG and fed Maria", return:
+{{
+  "cats": [
+    {{"name": "TG", "status": "playful", "notes": "played during shift"}},
+    {{"name": "Maria", "status": "eating well", "notes": "was fed"}}
+  ]
+}}"""
 
     try:
         app.logger.debug(f"Calling Claude API for email analysis...")
