@@ -82,7 +82,12 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                     app.logger.warning(f"  ✗ Response content is empty")
                     continue
 
-                content = response.content[0].text
+                first_block = response.content[0]
+                if not hasattr(first_block, 'text'):
+                    app.logger.warning(f"  ✗ First content block has no text attribute (type: {type(first_block).__name__})")
+                    continue
+
+                content = first_block.text
                 app.logger.info(f"  Claude response length: {len(content)}")
                 if content:
                     app.logger.info(f"  Claude response: {content[:500]}")
