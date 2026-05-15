@@ -1,9 +1,11 @@
 """Analyze volunteer emails to extract cat information and track costs."""
 import base64
 import json
+import logging
 from datetime import datetime, timedelta
 from anthropic import Anthropic
 
+logger = logging.getLogger(__name__)
 client = Anthropic()
 
 
@@ -36,8 +38,7 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
         if sample_size:
             emails = emails[:sample_size]
 
-        print(f"\nAnalyzing {len(emails)} emails from past {days_back} days...")
-        print("=" * 60)
+        app.logger.info(f"Analyzing {len(emails)} emails from past {days_back} days...")
 
         total_input_tokens = 0
         total_output_tokens = 0
@@ -45,8 +46,7 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
         results = []
 
         for i, email in enumerate(emails, 1):
-            print(f"\n[{i}/{len(emails)}] Analyzing: {email.subject}")
-            print(f"  From: {email.sender_email} | Date: {email.sent_at}")
+            app.logger.info(f"[{i}/{len(emails)}] Analyzing: {email.subject}")
 
             try:
                 email_data = {
@@ -56,13 +56,20 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                     "date": email.sent_at.isoformat() if email.sent_at else None,
                 }
 
-                response = _extract_cat_data(email_data)
+                response = _extract_cat_data(app, email_data)
+
+                # Check if response has usage data
+                if not response or not hasattr(response, 'usage'):
+                    app.logger.warning(f"No usage data in response for email {email.gmail_message_id}")
+                    continue
 
                 # Track tokens
                 input_tokens = response.usage.input_tokens
                 output_tokens = response.usage.output_tokens
                 total_input_tokens += input_tokens
                 total_output_tokens += output_tokens
+
+                app.logger.info(f"  Tokens: {input_tokens} in + {output_tokens} out")
 
                 # Calculate cost (Claude 3.5 Sonnet pricing)
                 input_cost = (input_tokens / 1_000_000) * 3  # $3 per 1M input
@@ -84,30 +91,16 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                         "cost": email_cost,
                     })
 
-                    # Print summary
                     cats = data.get("cats", [])
-                    print(f"  ✓ Found {len(cats)} cat(s): {', '.join([c.get('name', 'Unknown') for c in cats])}")
-                    print(f"  Tokens: {input_tokens} in + {output_tokens} out = ${email_cost:.6f}")
+                    app.logger.info(f"  ✓ Found {len(cats)} cat(s)")
 
-                except json.JSONDecodeError:
-                    print(f"  ✗ Failed to parse response")
+                except json.JSONDecodeError as e:
+                    app.logger.warning(f"  Failed to parse JSON response: {e}")
 
             except Exception as e:
-                print(f"  ✗ Error: {str(e)}")
+                app.logger.exception(f"  Error analyzing email: {str(e)}")
 
-        # Print summary
-        print("\n" + "=" * 60)
-        print("SUMMARY")
-        print("=" * 60)
-        print(f"Emails analyzed: {len(results)}")
-        print(f"Total input tokens: {total_input_tokens:,}")
-        print(f"Total output tokens: {total_output_tokens:,}")
-        print(f"Total cost: ${total_cost:.4f}")
-        if results:
-            avg_cost_per_email = total_cost / len(results)
-            print(f"Average cost per email: ${avg_cost_per_email:.6f}")
-            print(f"Estimated weekly cost (20 emails): ${avg_cost_per_email * 20:.4f}")
-            print(f"Estimated monthly cost (80 emails): ${avg_cost_per_email * 80:.4f}")
+        app.logger.info(f"Analysis complete. Total cost: ${total_cost:.4f}")
 
         return {
             "total_emails": len(results),
@@ -118,7 +111,7 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
         }
 
 
-def _extract_cat_data(email_data):
+def _extract_cat_data(app, email_data):
     """Use Claude to extract cat information from an email."""
 
     prompt = f"""Analyze this email from a volunteer and extract information about the cats mentioned.
@@ -150,12 +143,17 @@ Return JSON in this format:
 If no cats are mentioned, return {{"cats": []}}.
 Only return valid JSON, no other text."""
 
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
-        max_tokens=1000,
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    return response
+    try:
+        app.logger.debug(f"Calling Claude API for email analysis...")
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=1000,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        app.logger.debug(f"Response received. Input tokens: {response.usage.input_tokens}, Output: {response.usage.output_tokens}")
+        return response
+    except Exception as e:
+        app.logger.error(f"Claude API error: {str(e)}", exc_info=True)
+        raise
