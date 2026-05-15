@@ -120,10 +120,12 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
                 volunteers = sorted(regular_by_dow.get((dow, shift_type), []), key=lambda u: u.name)
                 is_tentative = True
 
-            # Filter out volunteers who removed themselves from this specific date
+            # Filter out volunteers who removed themselves from this specific date,
+            # but keep those who have explicit ShiftAssignments (re-added after removal)
+            explicit_assignment_ids = {v.id for v in actual.get(key, [])}
             volunteers = [
                 v for v in volunteers
-                if (d, shift_type, v.id) not in removed_set
+                if (d, shift_type, v.id) not in removed_set or v.id in explicit_assignment_ids
             ]
 
             schedule[d][shift_type] = {
