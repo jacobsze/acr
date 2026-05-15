@@ -95,6 +95,14 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                     app.logger.warning(f"  ✗ Response text is empty string")
                     continue
 
+                # Strip markdown code block wrapper if present
+                content = content.strip()
+                if content.startswith("```"):
+                    # Remove ```json or ``` from start
+                    content = content.lstrip("`").lstrip("json").lstrip()
+                    # Remove ``` from end
+                    content = content.rstrip("`").strip()
+
                 try:
                     data = json.loads(content)
                     results.append({
