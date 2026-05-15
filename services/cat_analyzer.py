@@ -78,8 +78,22 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                 total_cost += email_cost
 
                 # Parse response
-                content = response.content[0].text
-                app.logger.info(f"  Claude response: {content[:300]}")
+                if not response.content:
+                    app.logger.warning(f"  ✗ Response content is empty")
+                    continue
+
+                first_block = response.content[0]
+                if not hasattr(first_block, 'text'):
+                    app.logger.warning(f"  ✗ First content block has no text (type: {type(first_block).__name__})")
+                    continue
+
+                content = first_block.text
+                app.logger.info(f"  Claude response length: {len(content)}")
+                if content:
+                    app.logger.info(f"  Claude response: {content[:500]}")
+                else:
+                    app.logger.warning(f"  ✗ Response text is empty string")
+                    continue
 
                 try:
                     data = json.loads(content)
@@ -172,6 +186,7 @@ Example: If email says "played with TG and fed Maria", return:
             ]
         )
         app.logger.debug(f"Response received. Input tokens: {response.usage.input_tokens}, Output: {response.usage.output_tokens}")
+        app.logger.debug(f"Response stop reason: {response.stop_reason}, content blocks: {len(response.content)}")
         return response
     except Exception as e:
         app.logger.error(f"Claude API error: {str(e)}", exc_info=True)
