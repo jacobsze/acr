@@ -111,7 +111,7 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                     app.logger.info(f"  ✓ Found {len(cats)} cat(s): {[c.get('name') for c in cats]}")
 
                 except json.JSONDecodeError as e:
-                    app.logger.warning(f"  ✗ Failed to parse JSON: {e}")
+                    app.logger.warning(f"  ✗ [v3-deployed] Failed to parse JSON: {e}")
 
             except Exception as e:
                 app.logger.exception(f"  Error analyzing email: {str(e)}")
