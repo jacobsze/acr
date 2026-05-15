@@ -95,6 +95,7 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
 
                 except json.JSONDecodeError as e:
                     app.logger.warning(f"  Failed to parse JSON response: {e}")
+                    app.logger.debug(f"  Response content: {content[:200]}")
 
             except Exception as e:
                 app.logger.exception(f"  Error analyzing email: {str(e)}")
@@ -113,7 +114,7 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
 def _extract_cat_data(app, email_data):
     """Use Claude to extract cat information from an email."""
 
-    prompt = f"""Analyze this email from a volunteer and extract information about the cats mentioned.
+    prompt = f"""You are analyzing a volunteer email to extract information about cats mentioned.
 
 EMAIL:
 Subject: {email_data['subject']}
@@ -123,24 +124,27 @@ Date: {email_data['date']}
 Body:
 {email_data['body']}
 
-Extract structured data about the cats mentioned. For each cat:
-- Name/identifier
-- Current status (at_shelter, adopted, transferred, sick, healthy, etc.)
-- Any notes about their condition/behavior
+---
 
-Return JSON in this format:
+Extract information about any cats mentioned in this email. For each cat, identify:
+- Name/identifier
+- Current status (at_shelter, adopted, transferred, healthy, sick, injured, etc.)
+- Any relevant notes about their condition or behavior
+
+Return ONLY a JSON object in this exact format, with no additional text:
 {{
   "cats": [
     {{
-      "name": "cat name",
-      "status": "at_shelter|adopted|transferred|other",
-      "notes": "brief description"
+      "name": "cat name or identifier",
+      "status": "status description",
+      "notes": "any relevant details"
     }}
   ]
 }}
 
-If no cats are mentioned, return {{"cats": []}}.
-Only return valid JSON, no other text."""
+If no cats are mentioned, return: {{"cats": []}}
+
+Do not include any text before or after the JSON."""
 
     try:
         app.logger.debug(f"Calling Claude API for email analysis...")
