@@ -79,6 +79,8 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
 
                 # Parse response
                 content = response.content[0].text
+                app.logger.info(f"  Claude response: {content[:300]}")
+
                 try:
                     data = json.loads(content)
                     results.append({
@@ -92,11 +94,10 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
                     })
 
                     cats = data.get("cats", [])
-                    app.logger.info(f"  ✓ Found {len(cats)} cat(s)")
+                    app.logger.info(f"  ✓ Found {len(cats)} cat(s): {[c.get('name') for c in cats]}")
 
                 except json.JSONDecodeError as e:
-                    app.logger.warning(f"  Failed to parse JSON response: {e}")
-                    app.logger.debug(f"  Response content: {content[:200]}")
+                    app.logger.warning(f"  ✗ Failed to parse JSON: {e}")
 
             except Exception as e:
                 app.logger.exception(f"  Error analyzing email: {str(e)}")
