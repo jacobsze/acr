@@ -44,11 +44,19 @@ def _get_service(app):
     creds_file = app.config["GMAIL_CREDENTIALS_FILE"]
     token_file = app.config.get("GMAIL_TOKEN_FILE", "token.json")
 
-    if not os.path.exists(creds_file):
-        raise FileNotFoundError(
-            f"Gmail credentials file not found: {creds_file}. "
-            "Download it from Google Cloud Console."
-        )
+    # Load credentials from file path or JSON string
+    creds_config = None
+    if os.path.exists(creds_file):
+        with open(creds_file) as f:
+            creds_config = _json.load(f)
+    else:
+        try:
+            creds_config = _json.loads(creds_file)
+        except (ValueError, TypeError):
+            raise FileNotFoundError(
+                f"Gmail credentials not found and not valid JSON: {creds_file}. "
+                "Set GMAIL_CREDENTIALS_FILE to a file path or valid JSON."
+            )
 
     creds = None
 
@@ -94,7 +102,7 @@ def _get_service(app):
                 db.session.commit()
             app.logger.info("Gmail token refreshed and saved to database")
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(creds_file, SCOPES)
+            flow = InstalledAppFlow.from_client_config(creds_config, SCOPES)
             creds = flow.run_local_server(port=0)
             # Save new token to database
             with app.app_context():
