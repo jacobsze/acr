@@ -28,15 +28,19 @@ SCOPES = [
 
 
 def _get_service(app):
-    """Return an authenticated Gmail API service object."""
+    """Return an authenticated Gmail API service object.
+
+    Token is stored in AppSetting table ('gmail_token_json') and persists
+    across restarts. When the token is refreshed, it's automatically saved.
+    """
     import json as _json
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
+    from models import db, AppSetting
 
     creds_file = app.config["GMAIL_CREDENTIALS_FILE"]
-    token_file = app.config.get("GMAIL_TOKEN_FILE", "")
 
     if not os.path.exists(creds_file):
         raise FileNotFoundError(
@@ -46,41 +50,43 @@ def _get_service(app):
 
     creds = None
 
-    # Load from token file first (persists refreshed tokens), then env var as fallback
-    if token_file and os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-    else:
-        token_json_env = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
-        if token_json_env:
-            creds = Credentials.from_authorized_user_info(
-                _json.loads(token_json_env), SCOPES
-            )
+    # Load token from database (persists across restarts)
+    with app.app_context():
+        setting = db.session.get(AppSetting, "gmail_token_json")
+        if setting:
+            try:
+                creds = Credentials.from_authorized_user_info(
+                    _json.loads(setting.value), SCOPES
+                )
+            except Exception as e:
+                app.logger.warning("Failed to load Gmail token from database: %s", e)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-            # Always persist refreshed token back to file
-            if token_file:
-                with open(token_file, "w") as fh:
-                    fh.write(creds.to_json())
-            else:
-                # If no token file, update env var in-process (won't survive restart)
-                app.logger.warning(
-                    "Gmail token was refreshed but no GMAIL_TOKEN_FILE configured. "
-                    "Update GMAIL_TOKEN_JSON env var with: %s", creds.to_json()
-                )
+            # Save refreshed token back to database
+            with app.app_context():
+                setting = db.session.get(AppSetting, "gmail_token_json")
+                if setting:
+                    setting.value = creds.to_json()
+                else:
+                    setting = AppSetting(key="gmail_token_json", value=creds.to_json())
+                    db.session.add(setting)
+                db.session.commit()
+            app.logger.info("Gmail token refreshed and saved to database")
         else:
             flow = InstalledAppFlow.from_client_secrets_file(creds_file, SCOPES)
             creds = flow.run_local_server(port=0)
-            if token_file:
-                with open(token_file, "w") as fh:
-                    fh.write(creds.to_json())
-            else:
-                # If no token file, log the new token for manual env var update
-                app.logger.info(
-                    "New Gmail token generated. Update GMAIL_TOKEN_JSON env var with: %s",
-                    creds.to_json()
-                )
+            # Save new token to database
+            with app.app_context():
+                setting = db.session.get(AppSetting, "gmail_token_json")
+                if setting:
+                    setting.value = creds.to_json()
+                else:
+                    setting = AppSetting(key="gmail_token_json", value=creds.to_json())
+                    db.session.add(setting)
+                db.session.commit()
+            app.logger.info("New Gmail token generated and saved to database")
 
     return build("gmail", "v1", credentials=creds)
 
