@@ -13,8 +13,7 @@
   }
   .cats-table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
+    border-collapse: collapse;
     font-size: 0.88rem;
     table-layout: fixed;
   }
@@ -134,11 +133,10 @@
         {% for row in rows %}
           {% if row.shift == 'AM' %}
           <tr class="row-am">
-            <td class="col-date" rowspan="2" style="text-align: center;">
+            <td class="col-date" rowspan="2" style="text-align: center; border-bottom: 3px solid #adb5bd;">
               <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.35rem;">{{ row.date.strftime('%b %-d') }}</div>
-              <div>
-                <span class="shift-badge shift-am">AM</span>
-              </div>
+              <div><span class="shift-badge shift-am">AM</span></div>
+              <div style="margin-top: 1rem;"><span class="shift-badge shift-pm">PM</span></div>
             </td>
             <td class="col-vol">{{ row.volunteer }}</td>
             {% for cat in cats %}
@@ -154,9 +152,9 @@
           </tr>
           {% else %}
           <tr class="row-pm">
-            <td class="col-vol">{{ row.volunteer }}</td>
+            <td class="col-vol" style="border-bottom: 3px solid #adb5bd;">{{ row.volunteer }}</td>
             {% for cat in cats %}
-            <td class="cat-cell">
+            <td class="cat-cell" style="border-bottom: 3px solid #adb5bd;">
               {% set update = row.cells[cat.id] %}
               {% if update %}
                 {{ update }}
@@ -166,7 +164,6 @@
             </td>
             {% endfor %}
           </tr>
-          <tr style="height: 0.5rem;"><td colspan="{{ cats|length + 2 }}" style="padding: 0; border: none;"></td></tr>
           {% endif %}
         {% endfor %}
       </tbody>
