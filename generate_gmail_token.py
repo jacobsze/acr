@@ -19,7 +19,7 @@ print("A browser window should open asking for permission.\n")
 
 try:
     flow = InstalledAppFlow.from_client_secrets_file(creds_file, SCOPES)
-    creds = flow.run_local_server(port=8080)
+    creds = flow.run_local_server(port=0)
 
     # Save token to file
     with open(token_file, "w") as f:
