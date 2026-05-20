@@ -192,6 +192,8 @@ def _migrate_schema(app: Flask) -> None:
     from sqlalchemy import text
     migrations = [
         "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS shift_type VARCHAR(2)",
+        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS bowel_movement VARCHAR(100)",
+        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS food_intake VARCHAR(20)",
     ]
     with db.engine.connect() as conn:
         for sql in migrations:

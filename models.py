@@ -149,6 +149,8 @@ class CatLog(db.Model):
     date = db.Column(db.Date, nullable=False, index=True)
     shift_type = db.Column(db.String(2), nullable=True)  # AM | PM
     notes = db.Column(db.Text, nullable=True)
+    bowel_movement = db.Column(db.String(100), nullable=True)  # pee only | poop only | pee and poop | none | other: ...
+    food_intake = db.Column(db.String(20), nullable=True)   # all | 3/4 | 1/2 | 1/4 | none
     status = db.Column(db.String(50), nullable=True)
     volunteer_name = db.Column(db.String(100), nullable=True)
     email_message_id = db.Column(db.String(100), nullable=True)

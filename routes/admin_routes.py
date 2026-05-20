@@ -29,21 +29,43 @@ def normalize_phone(raw: str) -> tuple[str, str]:
 @admin_bp.route("/analyze-cat-emails", methods=["GET"])
 @owner_required
 def analyze_cat_emails():
-    """Analyze past 3 weeks of emails to extract cat information and save to database."""
+    """Analyze past emails to extract cat information and save to database.
+
+    Query params:
+      days_back=N  — how many days back to look (default 21)
+      force_since=YYYY-MM-DD  — delete existing CatLogs on/after this date and re-analyze
+    """
     from services.cat_analyzer import analyze_emails_for_cats
+    from datetime import date as _date
+
+    days_back = int(request.args.get("days_back", 21))
+    force_since_raw = request.args.get("force_since", "").strip()
+    force_since = None
+    if force_since_raw:
+        try:
+            force_since = _date.fromisoformat(force_since_raw)
+            # Make days_back wide enough to cover force_since
+            days_since = (_date.today() - force_since).days + 1
+            days_back = max(days_back, days_since)
+        except ValueError:
+            flash(f"Invalid force_since date: {force_since_raw}", "error")
+            return redirect(url_for("admin.cats"))
 
     try:
-        # Analyze past 3 weeks and save all results to database
-        result = analyze_emails_for_cats(current_app._get_current_object(), days_back=21)
-
+        result = analyze_emails_for_cats(
+            current_app._get_current_object(),
+            days_back=days_back,
+            force_since=force_since,
+        )
         return render_template(
             "admin_cat_analysis.html",
             result=result,
+            force_since=force_since,
         )
     except Exception as e:
         flash(f"Analysis failed: {str(e)}", "error")
         current_app.logger.exception("Cat email analysis failed: %s", str(e))
-        return redirect(url_for("admin.dashboard"))
+        return redirect(url_for("admin.cats"))
 
 
 @admin_bp.route("/cats", methods=["GET"])
@@ -63,7 +85,7 @@ def cats():
         .all()
     )
 
-    # {(date, shift_type or None): {cat_id: log}}
+    # {(date, shift_type): {cat_id: {notes, bowel, food}}}
     from collections import defaultdict
     matrix = defaultdict(dict)
     volunteer_by_slot = {}
@@ -71,14 +93,18 @@ def cats():
         shift = getattr(log, "shift_type", None) or "AM"
         key = (log.date, shift)
         if log.cat_id not in matrix[key]:
-            matrix[key][log.cat_id] = log.notes
+            matrix[key][log.cat_id] = {
+                "notes": log.notes,
+                "bowel": log.bowel_movement,
+                "food": log.food_intake,
+            }
         raw_vol = (log.volunteer_name or "").lower()
         if key not in volunteer_by_slot:
             volunteer_by_slot[key] = email_to_name.get(raw_vol, log.volunteer_name or "—")
 
     rows = []
     for d in days:
-        for shift in ("AM", "PM"):
+        for shift in ("PM", "AM"):   # PM first — afternoon is more recent
             key = (d, shift)
             cells = {}
             for cat in all_cats:
@@ -118,6 +144,8 @@ def cat_detail(cat_id):
             "log": log,
             "shift": getattr(log, "shift_type", None) or "—",
             "volunteer": email_to_name.get(raw_vol, log.volunteer_name or "—"),
+            "bowel": log.bowel_movement,
+            "food": log.food_intake,
         })
 
     return render_template(

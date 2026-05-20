@@ -17,6 +17,17 @@
   }
   .shift-am { background: #fff3cd; color: #856404; }
   .shift-pm { background: #cfe2ff; color: #084298; }
+  .badge-bowel, .badge-food {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.2rem;
+    display: inline-block;
+    margin-right: 0.25rem;
+    white-space: nowrap;
+  }
+  .badge-bowel { background: #e2d9f3; color: #3d0070; }
+  .badge-food  { background: #d1e7dd; color: #0a3622; }
 </style>
 {% endblock %}
 
@@ -60,10 +71,20 @@
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td>
+              <td class="align-top" style="padding-top: 0.6rem;">
+                {% if entry.bowel or entry.food %}
+                  <div style="margin-bottom: 0.3rem;">
+                    {% if entry.bowel %}
+                      <span class="badge-bowel">🚽 {{ entry.bowel }}</span>
+                    {% endif %}
+                    {% if entry.food %}
+                      <span class="badge-food">🍽 {{ entry.food }}</span>
+                    {% endif %}
+                  </div>
+                {% endif %}
                 {% if log.notes %}
                   {{ log.notes }}
-                {% else %}
+                {% elif not entry.bowel and not entry.food %}
                   <span class="text-muted fst-italic">—</span>
                 {% endif %}
               </td>

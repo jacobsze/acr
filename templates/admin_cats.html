@@ -84,11 +84,11 @@
     font-size: 0.82rem;
   }
 
-  /* Row grouping: AM row gets slightly different shade */
-  .row-am td { background: #fff; }
-  .row-pm td { background: #f8faff; }
-  .row-am td.col-date { background: #f8f9fa; }
+  /* Row grouping: PM row slightly different shade */
+  .row-pm td { background: #fff; }
+  .row-am td { background: #f8faff; }
   .row-pm td.col-date { background: #f8f9fa; }
+  .row-am td.col-date { background: #f8f9fa; }
 
   /* Shift badge */
   .shift-badge {
@@ -102,6 +102,24 @@
   }
   .shift-am { background: #fff3cd; color: #856404; }
   .shift-pm { background: #cfe2ff; color: #084298; }
+
+  /* Structured data badges inside cells */
+  .cell-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 0.3rem;
+  }
+  .badge-bowel, .badge-food {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.2rem;
+    white-space: nowrap;
+  }
+  .badge-bowel { background: #e2d9f3; color: #3d0070; }
+  .badge-food  { background: #d1e7dd; color: #0a3622; }
+  .cell-notes  { font-size: 0.82rem; color: #333; }
 </style>
 {% endblock %}
 
@@ -109,7 +127,13 @@
 <div class="cats-wrap">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h4 mb-0">Cats at the Shelter</h1>
-    <a href="{{ url_for('admin.analyze_cat_emails') }}" class="btn btn-sm btn-secondary">Re-analyze Emails</a>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin.analyze_cat_emails') }}" class="btn btn-sm btn-secondary">Re-analyze Emails</a>
+      <a href="{{ url_for('admin.analyze_cat_emails', force_since='2025-05-16') }}" class="btn btn-sm btn-warning"
+         onclick="return confirm('This will delete and re-analyze all cat logs since May 16. Continue?')">
+        Force Re-analyze (since May 16)
+      </a>
+    </div>
   </div>
 
   {% if cats %}
@@ -129,21 +153,35 @@
         </tr>
       </thead>
       <tbody>
-        {% set ns = namespace(last_date=None) %}
         {% for row in rows %}
-          {% if row.shift == 'AM' %}
-          <tr class="row-am">
+          {% if row.shift == 'PM' %}
+          {# PM row — appears first; date cell spans both PM and AM rows #}
+          <tr class="row-pm">
             <td class="col-date" rowspan="2" style="text-align: center; border-bottom: 3px solid #adb5bd;">
               <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.35rem;">{{ row.date.strftime('%b %-d') }}</div>
-              <div><span class="shift-badge shift-am">AM</span></div>
-              <div style="margin-top: 1rem;"><span class="shift-badge shift-pm">PM</span></div>
+              <div><span class="shift-badge shift-pm">PM</span></div>
+              <div style="margin-top: 0.6rem;"><span class="shift-badge shift-am">AM</span></div>
             </td>
             <td class="col-vol">{{ row.volunteer }}</td>
             {% for cat in cats %}
             <td class="cat-cell">
-              {% set update = row.cells[cat.id] %}
-              {% if update %}
-                {{ update }}
+              {% set cell = row.cells[cat.id] %}
+              {% if cell %}
+                {% if cell.bowel or cell.food %}
+                <div class="cell-badges">
+                  {% if cell.bowel %}
+                    <span class="badge-bowel">🚽 {{ cell.bowel }}</span>
+                  {% endif %}
+                  {% if cell.food %}
+                    <span class="badge-food">🍽 {{ cell.food }}</span>
+                  {% endif %}
+                </div>
+                {% endif %}
+                {% if cell.notes %}
+                  <div class="cell-notes">{{ cell.notes }}</div>
+                {% elif not cell.bowel and not cell.food %}
+                  <span class="no-update">—</span>
+                {% endif %}
               {% else %}
                 <span class="no-update">—</span>
               {% endif %}
@@ -151,13 +189,28 @@
             {% endfor %}
           </tr>
           {% else %}
-          <tr class="row-pm">
+          {# AM row — no date cell (covered by PM rowspan above) #}
+          <tr class="row-am">
             <td class="col-vol" style="border-bottom: 3px solid #adb5bd;">{{ row.volunteer }}</td>
             {% for cat in cats %}
             <td class="cat-cell" style="border-bottom: 3px solid #adb5bd;">
-              {% set update = row.cells[cat.id] %}
-              {% if update %}
-                {{ update }}
+              {% set cell = row.cells[cat.id] %}
+              {% if cell %}
+                {% if cell.bowel or cell.food %}
+                <div class="cell-badges">
+                  {% if cell.bowel %}
+                    <span class="badge-bowel">🚽 {{ cell.bowel }}</span>
+                  {% endif %}
+                  {% if cell.food %}
+                    <span class="badge-food">🍽 {{ cell.food }}</span>
+                  {% endif %}
+                </div>
+                {% endif %}
+                {% if cell.notes %}
+                  <div class="cell-notes">{{ cell.notes }}</div>
+                {% elif not cell.bowel and not cell.food %}
+                  <span class="no-update">—</span>
+                {% endif %}
               {% else %}
                 <span class="no-update">—</span>
               {% endif %}

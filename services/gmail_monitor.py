@@ -655,7 +655,7 @@ def check_and_process(app) -> None:
                 gmail_message_id=msg_id,
                 sender_email=content.get("from_email", ""),
                 subject=content.get("subject", ""),
-                body_snippet=content.get("body", "")[:500],
+                body_snippet=content.get("body", "")[:1500],
                 parsed_action=json.dumps(parsed) if parsed else None,
                 status=status,
                 error_message=error_msg,
