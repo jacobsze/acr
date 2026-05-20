@@ -146,12 +146,41 @@ Use "date_range" (and set "date" to null) when the email describes a span of tim
 
     try:
         import anthropic
+        import time
+
         client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
+
+        # Retry logic for rate limits (429)
+        max_retries = 2
+        retry_delay = 1  # Start with 1 second
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                break  # Success, exit retry loop
+            except anthropic.RateLimitError as exc:
+                last_error = exc
+                if attempt < max_retries - 1:
+                    # Wait before retrying, but keep it short to avoid worker timeout
+                    time.sleep(min(retry_delay, 3))  # Cap at 3 seconds
+                    retry_delay *= 2
+                else:
+                    # Out of retries, return error result
+                    return {
+                        "action": "unknown",
+                        "volunteer_email": None,
+                        "date": None,
+                        "shift_type": None,
+                        "confidence": "low",
+                        "reason": "Rate limited by Anthropic API.",
+                        "error": "Rate limit hit - will retry later",
+                    }
+
         raw = response.content[0].text.strip()
 
         # Strip markdown code fences if Claude ignored the formatting instruction
