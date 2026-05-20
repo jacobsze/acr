@@ -49,9 +49,9 @@ def analyze_cat_emails():
 @admin_bp.route("/cats", methods=["GET"])
 @admin_required
 def cats():
-    """Cat activity matrix: last 5 days × all cats."""
+    """Cat activity matrix: last 7 days × all cats."""
     today = date.today()
-    days = [today - timedelta(days=i) for i in range(5)]
+    days = [today - timedelta(days=i) for i in range(7)]
 
     all_cats = Cat.query.order_by(Cat.name).all()
     email_to_name = {u.email.lower(): u.name for u in User.query.filter_by(active=True).all()}
