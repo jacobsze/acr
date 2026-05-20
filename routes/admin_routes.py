@@ -49,12 +49,51 @@ def analyze_cat_emails():
 @admin_bp.route("/cats", methods=["GET"])
 @admin_required
 def cats():
-    """View all cats with their current status and last seen date."""
+    """Cat activity matrix: last 5 days × all cats."""
+    today = date.today()
+    days = [today - timedelta(days=i) for i in range(5)]
+
     all_cats = Cat.query.order_by(Cat.name).all()
+    email_to_name = {u.email.lower(): u.name for u in User.query.filter_by(active=True).all()}
+
+    logs = (
+        CatLog.query
+        .filter(CatLog.date.in_(days))
+        .order_by(CatLog.date.desc(), CatLog.created_at.asc())
+        .all()
+    )
+
+    # {(date, shift_type or None): {cat_id: log}}
+    from collections import defaultdict
+    matrix = defaultdict(dict)
+    volunteer_by_slot = {}
+    for log in logs:
+        shift = getattr(log, "shift_type", None) or "AM"
+        key = (log.date, shift)
+        if log.cat_id not in matrix[key]:
+            matrix[key][log.cat_id] = log.notes
+        raw_vol = (log.volunteer_name or "").lower()
+        if key not in volunteer_by_slot:
+            volunteer_by_slot[key] = email_to_name.get(raw_vol, log.volunteer_name or "—")
+
+    rows = []
+    for d in days:
+        for shift in ("AM", "PM"):
+            key = (d, shift)
+            cells = {}
+            for cat in all_cats:
+                cells[cat.id] = matrix[key].get(cat.id)
+            rows.append({
+                "date": d,
+                "shift": shift,
+                "volunteer": volunteer_by_slot.get(key, "—"),
+                "cells": cells,
+            })
 
     return render_template(
         "admin_cats.html",
         cats=all_cats,
+        rows=rows,
     )
 
 
@@ -63,14 +102,28 @@ def cats():
 def cat_detail(cat_id):
     """View detailed history for a specific cat."""
     cat = Cat.query.get_or_404(cat_id)
+    email_to_name = {u.email.lower(): u.name for u in User.query.filter_by(active=True).all()}
 
-    # Get all logs for this cat, ordered by date descending
-    logs = CatLog.query.filter_by(cat_id=cat_id).order_by(CatLog.date.desc()).all()
+    logs = (
+        CatLog.query
+        .filter_by(cat_id=cat_id)
+        .order_by(CatLog.date.desc(), CatLog.created_at.asc())
+        .all()
+    )
+
+    enriched = []
+    for log in logs:
+        raw_vol = (log.volunteer_name or "").lower()
+        enriched.append({
+            "log": log,
+            "shift": getattr(log, "shift_type", None) or "—",
+            "volunteer": email_to_name.get(raw_vol, log.volunteer_name or "—"),
+        })
 
     return render_template(
         "admin_cat_detail.html",
         cat=cat,
-        logs=logs,
+        logs=enriched,
     )
 
 

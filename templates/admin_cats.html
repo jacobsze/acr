@@ -1,60 +1,169 @@
 {% extends "base.html" %}
 {% block title %}Cats – Petco86 Volunteer Schedule{% endblock %}
 
-{% block content %}
-<div class="container mt-4">
-  <div class="row">
-    <div class="col-lg-10">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h1>Cats at the Shelter</h1>
-        <a href="{{ url_for('admin.analyze_cat_emails') }}" class="btn btn-sm btn-secondary">Re-analyze Emails</a>
-      </div>
+{% block head_extra %}
+<style>
+  .cats-wrap {
+    width: 100%;
+    padding: 1.25rem 1.5rem;
+  }
+  .cats-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .cats-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.88rem;
+    table-layout: fixed;
+  }
 
-      {% if cats %}
-        <div class="card">
-          <div class="card-body">
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead class="table-light">
-                  <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Last Seen</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for cat in cats %}
-                  <tr>
-                    <td>
-                      <strong>{{ cat.name }}</strong>
-                    </td>
-                    <td>
-                      <span class="badge bg-info">{{ cat.status }}</span>
-                    </td>
-                    <td>
-                      {% if cat.last_seen_date %}
-                        {{ cat.last_seen_date.strftime('%m/%d/%Y') }}
-                      {% else %}
-                        <span class="text-muted">—</span>
-                      {% endif %}
-                    </td>
-                    <td>
-                      <a href="{{ url_for('admin.cat_detail', cat_id=cat.id) }}" class="btn btn-sm btn-outline-primary">View History</a>
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      {% else %}
-        <div class="alert alert-info">
-          <p>No cats have been logged yet. <a href="{{ url_for('admin.analyze_cat_emails') }}">Analyze emails</a> to extract and save cat information.</p>
-        </div>
-      {% endif %}
-    </div>
+  /* Header row */
+  .cats-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #212529;
+    color: #fff;
+    font-weight: 600;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 2px solid #444;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .cats-table thead th.col-date {
+    text-align: left;
+    min-width: 90px;
+    width: 90px;
+  }
+  .cats-table thead th.col-vol {
+    min-width: 110px;
+    width: 110px;
+  }
+
+  /* Sticky date column */
+  .cats-table td.col-date,
+  .cats-table th.col-date {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+  .cats-table td.col-date {
+    background: #f8f9fa;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 0.55rem 0.75rem;
+    border-right: 2px solid #dee2e6;
+    vertical-align: middle;
+  }
+  .cats-table thead th.col-date {
+    z-index: 4;
+    background: #212529;
+    border-right: 2px solid #555;
+  }
+
+  /* Body cells */
+  .cats-table tbody td {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: top;
+    text-align: center;
+  }
+  .cats-table tbody td.col-vol {
+    font-size: 0.82rem;
+    color: #555;
+    vertical-align: middle;
+    text-align: center;
+  }
+  .cats-table tbody td.cat-cell {
+    text-align: left;
+  }
+  .no-update {
+    color: #adb5bd;
+    font-style: italic;
+    font-size: 0.82rem;
+  }
+
+  /* Row grouping: AM row gets slightly different shade */
+  .row-am td { background: #fff; }
+  .row-pm td { background: #f8faff; }
+  .row-am td.col-date { background: #f8f9fa; }
+  .row-pm td.col-date { background: #eef1f8; }
+
+  /* Date group separator */
+  .cats-table tbody tr.date-first td {
+    border-top: 2px solid #adb5bd;
+  }
+
+  .shift-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.25rem;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+  }
+  .shift-am { background: #fff3cd; color: #856404; }
+  .shift-pm { background: #cfe2ff; color: #084298; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cats-wrap">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Cats at the Shelter</h1>
+    <a href="{{ url_for('admin.analyze_cat_emails') }}" class="btn btn-sm btn-secondary">Re-analyze Emails</a>
   </div>
+
+  {% if cats %}
+  <div class="cats-table-scroll">
+    <table class="cats-table">
+      <thead>
+        <tr>
+          <th class="col-date">Date</th>
+          <th class="col-vol">Volunteer</th>
+          {% for cat in cats %}
+          <th>
+            <a href="{{ url_for('admin.cat_detail', cat_id=cat.id) }}" class="text-white text-decoration-none">
+              {{ cat.name }}
+            </a>
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if row.shift == 'AM' %}row-am date-first{% else %}row-pm{% endif %}">
+          <td class="col-date">
+            {% if row.shift == 'AM' %}
+              {{ row.date.strftime('%b %-d') }}
+            {% endif %}
+            <span class="shift-badge {% if row.shift == 'AM' %}shift-am{% else %}shift-pm{% endif %}">
+              {{ row.shift }}
+            </span>
+          </td>
+          <td class="col-vol">{{ row.volunteer }}</td>
+          {% for cat in cats %}
+          <td class="cat-cell">
+            {% set update = row.cells[cat.id] %}
+            {% if update %}
+              {{ update }}
+            {% else %}
+              <span class="no-update">No update</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="alert alert-info">
+      No cats have been logged yet. <a href="{{ url_for('admin.analyze_cat_emails') }}">Analyze emails</a> to extract and save cat information.
+    </div>
+  {% endif %}
 </div>
 {% endblock %}
