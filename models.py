@@ -147,8 +147,9 @@ class CatLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cat_id = db.Column(db.Integer, db.ForeignKey("cats.id"), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False, index=True)
+    shift_type = db.Column(db.String(2), nullable=True)  # AM | PM
     notes = db.Column(db.Text, nullable=True)
-    status = db.Column(db.String(50), nullable=True)  # current status mentioned in this log
+    status = db.Column(db.String(50), nullable=True)
     volunteer_name = db.Column(db.String(100), nullable=True)
     email_message_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

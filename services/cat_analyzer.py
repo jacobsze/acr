@@ -1,45 +1,132 @@
-"""Analyze volunteer emails to extract cat information and track costs."""
-import base64
+"""Analyze volunteer emails to extract per-cat updates using exact quotes."""
 import json
 import logging
-from datetime import datetime, timedelta
-from anthropic import Anthropic
+from datetime import datetime, timedelta, date as _date
 
 logger = logging.getLogger(__name__)
-client = Anthropic()
 
 
-def analyze_emails_for_cats(app, days_back=21, sample_size=None):
+def _detect_shift_from_assignment(user_id, email_date, app):
+    """Return AM or PM based on the sender's ShiftAssignment on that date."""
+    from models import ShiftAssignment
+    assignments = ShiftAssignment.query.filter_by(
+        user_id=user_id, date=email_date,
+    ).all()
+    if len(assignments) == 1:
+        return assignments[0].shift_type
+    return None  # No assignment or ambiguous (both shifts)
+
+
+def _detect_shift_from_text(subject, body):
+    """Fall back to keyword parsing in email subject/body."""
+    text = ((subject or "") + " " + (body or "")).lower()
+    am_keywords = ["am shift", "morning shift", " am ", "a.m.", "this morning"]
+    pm_keywords = ["pm shift", "afternoon shift", "evening shift", " pm ", "p.m.", "this afternoon", "this evening"]
+    if any(kw in text for kw in am_keywords):
+        return "AM"
+    if any(kw in text for kw in pm_keywords):
+        return "PM"
+    return None
+
+
+def _extract_cat_updates(email_data, known_cat_names):
+    """Use Claude Haiku to extract exact per-cat quotes from a volunteer email."""
+    from anthropic import Anthropic
+    client = Anthropic()
+
+    known_cats_str = ", ".join(known_cat_names) if known_cat_names else "none on record yet"
+
+    prompt = f"""You are analyzing a volunteer shift report email for a cat shelter.
+
+Known cats at this shelter: {known_cats_str}
+
+EMAIL:
+Subject: {email_data['subject']}
+From: {email_data['sender']}
+
+Body:
+{email_data['body']}
+
+---
+
+Your task: For each cat mentioned, extract the EXACT text from the email that refers to them.
+
+Rules:
+1. Use the volunteer's EXACT words — do not paraphrase or summarize
+2. If a sentence mentions multiple cats, include it verbatim for ALL of those cats
+3. If the email says "all the cats" or similar, include that text for every known cat
+4. Only include cats actually mentioned — skip cats with no mention
+5. Ignore reply-chain lines (starting with ">"), email signatures, and scheduling content
+6. Match cat names case-insensitively to the known cats list
+
+Return ONLY valid JSON, no other text:
+{{
+  "cats": [
+    {{
+      "name": "cat name (matched to known cats list)",
+      "update": "exact text from the email about this cat"
+    }}
+  ]
+}}
+
+If no cats are mentioned return: {{"cats": []}}"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response
+
+
+def analyze_emails_for_cats(app, days_back=None, sample_size=None):
     """
-    Analyze emails from the past N days to extract cat information.
-    Stores results in Cat and CatLog models.
+    Analyze volunteer emails to extract per-cat exact-quote updates.
 
-    Args:
-        app: Flask app context
-        days_back: Number of days to look back (default 21 = 3 weeks)
-        sample_size: If set, only analyze this many emails (for testing)
+    Skips emails already represented in CatLog (dedup by Gmail message ID).
+    Detects shift (AM/PM) from ShiftAssignment first, then email text.
     """
     with app.app_context():
-        from models import EmailProcessingLog, Cat, CatLog, db
-        from datetime import date
+        from models import EmailProcessingLog, Cat, CatLog, User, db
 
-        # Get emails from past N days - skip schedule change emails (status=success)
-        cutoff_date = datetime.utcnow() - timedelta(days=days_back)
-        emails = (
-            EmailProcessingLog.query
-            .filter(
-                EmailProcessingLog.processed_at >= cutoff_date,
-                EmailProcessingLog.body_snippet.isnot(None),
-                EmailProcessingLog.status != "success",  # Skip schedule change emails
-            )
-            .order_by(EmailProcessingLog.processed_at.desc())
+        # Known cats from DB (used in the Claude prompt)
+        known_cats = Cat.query.order_by(Cat.name).all()
+        known_cat_names = [c.name for c in known_cats]
+
+        # Message IDs already saved to CatLog — don't reprocess
+        processed_ids = {
+            row[0]
+            for row in db.session.query(CatLog.email_message_id)
+            .filter(CatLog.email_message_id.isnot(None))
+            .distinct()
             .all()
+        }
+
+        # Fetch candidate emails
+        query = (
+            EmailProcessingLog.query
+            .filter(EmailProcessingLog.body_snippet.isnot(None))
+            .order_by(EmailProcessingLog.sent_at.desc())
         )
+        if days_back:
+            cutoff = datetime.utcnow() - timedelta(days=days_back)
+            query = query.filter(EmailProcessingLog.processed_at >= cutoff)
+
+        all_emails = query.all()
+        emails = [e for e in all_emails if e.gmail_message_id not in processed_ids]
 
         if sample_size:
             emails = emails[:sample_size]
 
-        app.logger.info(f"[CAT_ANALYZER_V2] Analyzing {len(emails)} emails from past {days_back} days...")
+        app.logger.info(
+            "[CAT_ANALYZER] %d new emails to process (skipped %d already done)",
+            len(emails), len(all_emails) - len(emails),
+        )
+
+        email_to_user = {
+            u.email.lower(): u
+            for u in User.query.filter_by(active=True).all()
+        }
 
         total_input_tokens = 0
         total_output_tokens = 0
@@ -47,120 +134,90 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
         cats_processed = 0
         cats_created = 0
 
-        for i, email in enumerate(emails, 1):
-            app.logger.info(f"[{i}/{len(emails)}] Analyzing: {email.subject}")
-
+        for i, email_log in enumerate(emails, 1):
+            app.logger.info("[%d/%d] %s", i, len(emails), email_log.subject)
             try:
-                email_data = {
-                    "subject": email.subject,
-                    "body": email.body_snippet,
-                    "sender": email.sender_email,
-                    "date": email.sent_at.isoformat() if email.sent_at else None,
-                }
+                email_date = email_log.sent_at.date() if email_log.sent_at else _date.today()
 
-                response = _extract_cat_data(app, email_data)
+                # Determine shift: ShiftAssignment first, then text fallback
+                sender = (email_log.sender_email or "").lower()
+                sender_user = email_to_user.get(sender)
+                shift_type = None
+                if sender_user:
+                    shift_type = _detect_shift_from_assignment(sender_user.id, email_date, app)
+                if not shift_type:
+                    shift_type = _detect_shift_from_text(email_log.subject, email_log.body_snippet)
 
-                # Check if response has usage data
-                if not response or not hasattr(response, 'usage'):
-                    app.logger.warning(f"No usage data in response for email {email.gmail_message_id}")
+                response = _extract_cat_updates(
+                    {
+                        "subject": email_log.subject or "",
+                        "sender": email_log.sender_email or "",
+                        "body": email_log.body_snippet or "",
+                    },
+                    known_cat_names,
+                )
+
+                if not response or not response.content:
+                    app.logger.warning("  Empty response for %s", email_log.gmail_message_id)
                     continue
 
-                # Track tokens
-                input_tokens = response.usage.input_tokens
-                output_tokens = response.usage.output_tokens
-                total_input_tokens += input_tokens
-                total_output_tokens += output_tokens
+                total_input_tokens += response.usage.input_tokens
+                total_output_tokens += response.usage.output_tokens
+                # Haiku pricing: $0.80/M input, $4.00/M output
+                total_cost += (
+                    response.usage.input_tokens / 1_000_000 * 0.80
+                    + response.usage.output_tokens / 1_000_000 * 4.00
+                )
 
-                app.logger.info(f"  Tokens: {input_tokens} in + {output_tokens} out")
+                raw = response.content[0].text.strip()
+                if raw.startswith("```"):
+                    raw = raw.lstrip("`").lstrip("json").strip().rstrip("`").strip()
 
-                # Calculate cost (Claude 3.5 Sonnet pricing)
-                input_cost = (input_tokens / 1_000_000) * 3  # $3 per 1M input
-                output_cost = (output_tokens / 1_000_000) * 15  # $15 per 1M output
-                email_cost = input_cost + output_cost
-                total_cost += email_cost
+                data = json.loads(raw)
+                cat_updates = data.get("cats", [])
 
-                # Parse response
-                if not response.content:
-                    app.logger.warning(f"  ✗ Response content is empty")
-                    continue
+                for entry in cat_updates:
+                    cat_name = (entry.get("name") or "").strip()
+                    update_text = (entry.get("update") or "").strip()
+                    if not cat_name or not update_text:
+                        continue
 
-                first_block = response.content[0]
-                if not hasattr(first_block, 'text'):
-                    app.logger.warning(f"  ✗ First content block has no text (type: {type(first_block).__name__})")
-                    continue
+                    cat = Cat.query.filter_by(name=cat_name).first()
+                    if not cat:
+                        cat = Cat(name=cat_name, status="at_shelter")
+                        db.session.add(cat)
+                        db.session.flush()
+                        cats_created += 1
+                        known_cat_names.append(cat_name)
+                        app.logger.info("  Created new cat: %s", cat_name)
 
-                content = first_block.text
-                app.logger.warning(f"  [DEBUG] Claude response length: {len(content)}")
-                if content:
-                    app.logger.warning(f"  [DEBUG] Claude response: {content[:500]}")
-                else:
-                    app.logger.warning(f"  ✗ Response text is empty string")
-                    continue
+                    cat.last_seen_date = email_date
 
-                # Strip markdown code block wrapper if present
-                content = content.strip()
-                if content.startswith("```"):
-                    # Remove ```json or ``` from start
-                    content = content.lstrip("`").lstrip("json").lstrip()
-                    # Remove ``` from end
-                    content = content.rstrip("`").strip()
+                    db.session.add(CatLog(
+                        cat_id=cat.id,
+                        date=email_date,
+                        shift_type=shift_type,
+                        notes=update_text,
+                        volunteer_name=email_log.sender_email,
+                        email_message_id=email_log.gmail_message_id,
+                    ))
+                    cats_processed += 1
 
-                try:
-                    data = json.loads(content)
-                    cats = data.get("cats", [])
+                db.session.commit()
+                app.logger.info(
+                    "  ✓ %d update(s) [shift=%s]", len(cat_updates), shift_type or "unknown"
+                )
 
-                    # Save cats to database
-                    email_date = email.sent_at.date() if email.sent_at else date.today()
-                    for cat_data in cats:
-                        cat_name = cat_data.get("name", "").strip()
-                        if not cat_name:
-                            continue
-
-                        # Get or create cat
-                        cat = Cat.query.filter_by(name=cat_name).first()
-                        if not cat:
-                            cat = Cat(name=cat_name, status=cat_data.get("status", "at_shelter"))
-                            db.session.add(cat)
-                            db.session.flush()  # Get the ID
-                            cats_created += 1
-                            app.logger.info(f"    Created new cat: {cat_name}")
-                        else:
-                            # Update status if provided
-                            if cat_data.get("status"):
-                                cat.status = cat_data.get("status")
-
-                        # Create log entry
-                        log_entry = CatLog(
-                            cat_id=cat.id,
-                            date=email_date,
-                            notes=cat_data.get("notes", ""),
-                            status=cat_data.get("status", ""),
-                            volunteer_name=email.sender_email,
-                            email_message_id=email.gmail_message_id,
-                        )
-                        db.session.add(log_entry)
-                        cats_processed += 1
-
-                    # Update cat's last_seen_date
-                    if cats:
-                        for cat_data in cats:
-                            cat_name = cat_data.get("name", "").strip()
-                            if cat_name:
-                                cat = Cat.query.filter_by(name=cat_name).first()
-                                if cat:
-                                    cat.last_seen_date = email_date
-
-                    db.session.commit()
-                    app.logger.info(f"  ✓ Found {len(cats)} cat(s): {[c.get('name') for c in cats]}")
-
-                except json.JSONDecodeError as e:
-                    app.logger.warning(f"  ✗ [v3-deployed] Failed to parse JSON: {e}")
-
+            except json.JSONDecodeError as e:
+                app.logger.warning("  ✗ JSON parse error for %s: %s", email_log.gmail_message_id, e)
             except Exception as e:
-                app.logger.exception(f"  Error analyzing email: {str(e)}")
+                app.logger.exception("  ✗ Error on %s: %s", email_log.gmail_message_id, e)
+                db.session.rollback()
 
-        app.logger.info(f"Analysis complete. Total cost: ${total_cost:.4f}")
-        app.logger.info(f"Cats processed: {cats_processed}, Cats created: {cats_created}")
+        app.logger.info(
+            "[CAT_ANALYZER] Done. %d updates, %d new cats, cost $%.4f",
+            cats_processed, cats_created, total_cost,
+        )
 
         return {
             "total_emails": len(emails),
@@ -170,69 +227,3 @@ def analyze_emails_for_cats(app, days_back=21, sample_size=None):
             "cats_processed": cats_processed,
             "cats_created": cats_created,
         }
-
-
-def _extract_cat_data(app, email_data):
-    """Use Claude to extract cat information from an email."""
-
-    prompt = f"""You are analyzing a volunteer shift report email to extract information about cats mentioned.
-
-EMAIL:
-Subject: {email_data['subject']}
-From: {email_data['sender']}
-Date: {email_data['date']}
-
-Body:
-{email_data['body']}
-
----
-
-Your task: Extract every cat mentioned in this email, including casual references.
-
-Look for:
-- Direct mentions: "Maria", "TG", "Kiki", etc.
-- Activity mentions: "played with TG", "fed Maria", "Maria ate well"
-- Status mentions: "SP was calm", "Kiki watched from below"
-- Any proper nouns that refer to individual cats
-
-For each cat found:
-1. Name/identifier (as the cat is called)
-2. Status/condition (healthy, calm, playful, eating well, etc.)
-3. Any notes (what they were doing, observations)
-
-Return ONLY valid JSON, no other text:
-{{
-  "cats": [
-    {{
-      "name": "cat name",
-      "status": "observed status or condition",
-      "notes": "activities or observations"
-    }}
-  ]
-}}
-
-If no cats are mentioned, return: {{"cats": []}}
-
-Example: If email says "played with TG and fed Maria", return:
-{{
-  "cats": [
-    {{"name": "TG", "status": "playful", "notes": "played during shift"}},
-    {{"name": "Maria", "status": "eating well", "notes": "was fed"}}
-  ]
-}}"""
-
-    try:
-        app.logger.debug(f"Calling Claude API for email analysis...")
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        app.logger.debug(f"Response received. Input tokens: {response.usage.input_tokens}, Output: {response.usage.output_tokens}")
-        app.logger.debug(f"Response stop reason: {response.stop_reason}, content blocks: {len(response.content)}")
-        return response
-    except Exception as e:
-        app.logger.error(f"Claude API error: {str(e)}", exc_info=True)
-        raise

@@ -37,6 +37,7 @@ def create_app(config_class=Config) -> Flask:
     db.init_app(app)
     with app.app_context():
         db.create_all()
+        _migrate_schema(app)
         _ensure_owner_exists(app)
         _log_db_backend(app)
 
@@ -184,6 +185,21 @@ def _start_open_shift_cron(app: Flask) -> None:
         app.logger.warning("APScheduler not installed – open-shift alert disabled.")
     except Exception as exc:
         app.logger.error("Failed to start open-shift cron: %s", exc)
+
+
+def _migrate_schema(app: Flask) -> None:
+    """Apply incremental schema changes not handled by db.create_all()."""
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS shift_type VARCHAR(2)",
+    ]
+    with db.engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+            except Exception:
+                pass
+        conn.commit()
 
 
 def _ensure_owner_exists(app: Flask) -> None:
