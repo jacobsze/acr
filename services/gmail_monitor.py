@@ -32,6 +32,7 @@ def _get_service(app):
 
     Token is stored in AppSetting table ('gmail_token_json') and persists
     across restarts. When the token is refreshed, it's automatically saved.
+    Falls back to token.json for migration purposes.
     """
     import json as _json
     from google.auth.transport.requests import Request
@@ -41,6 +42,7 @@ def _get_service(app):
     from models import db, AppSetting
 
     creds_file = app.config["GMAIL_CREDENTIALS_FILE"]
+    token_file = app.config.get("GMAIL_TOKEN_FILE", "token.json")
 
     if not os.path.exists(creds_file):
         raise FileNotFoundError(
@@ -60,6 +62,23 @@ def _get_service(app):
                 )
             except Exception as e:
                 app.logger.warning("Failed to load Gmail token from database: %s", e)
+
+    # Fallback to token.json if not in database (migration from local dev)
+    if not creds and token_file and os.path.exists(token_file):
+        try:
+            creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+            # Migrate to database
+            with app.app_context():
+                setting = AppSetting.query.get("gmail_token_json")
+                if setting:
+                    setting.value = creds.to_json()
+                else:
+                    setting = AppSetting(key="gmail_token_json", value=creds.to_json())
+                    db.session.add(setting)
+                db.session.commit()
+            app.logger.info("Gmail token migrated from file to database")
+        except Exception as e:
+            app.logger.warning("Failed to load Gmail token from file: %s", e)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
