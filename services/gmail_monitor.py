@@ -46,28 +46,41 @@ def _get_service(app):
 
     creds = None
 
-    # Prefer GMAIL_TOKEN_JSON env var (survives Render deploys) over token file
-    token_json_env = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
-    if token_json_env:
-        creds = Credentials.from_authorized_user_info(
-            _json.loads(token_json_env), SCOPES
-        )
-    elif token_file and os.path.exists(token_file):
+    # Load from token file first (persists refreshed tokens), then env var as fallback
+    if token_file and os.path.exists(token_file):
         creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+    else:
+        token_json_env = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
+        if token_json_env:
+            creds = Credentials.from_authorized_user_info(
+                _json.loads(token_json_env), SCOPES
+            )
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-            # Persist refreshed token back to file if available
+            # Always persist refreshed token back to file
             if token_file:
                 with open(token_file, "w") as fh:
                     fh.write(creds.to_json())
+            else:
+                # If no token file, update env var in-process (won't survive restart)
+                app.logger.warning(
+                    "Gmail token was refreshed but no GMAIL_TOKEN_FILE configured. "
+                    "Update GMAIL_TOKEN_JSON env var with: %s", creds.to_json()
+                )
         else:
             flow = InstalledAppFlow.from_client_secrets_file(creds_file, SCOPES)
             creds = flow.run_local_server(port=0)
             if token_file:
                 with open(token_file, "w") as fh:
                     fh.write(creds.to_json())
+            else:
+                # If no token file, log the new token for manual env var update
+                app.logger.info(
+                    "New Gmail token generated. Update GMAIL_TOKEN_JSON env var with: %s",
+                    creds.to_json()
+                )
 
     return build("gmail", "v1", credentials=creds)
 
