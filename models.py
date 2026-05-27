@@ -17,6 +17,7 @@ class User(db.Model):
     clerk_user_id = db.Column(db.String(100), unique=True, nullable=True, index=True)
     active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime, nullable=True)
 
     regular_shifts = db.relationship(
         "RegularSchedule",

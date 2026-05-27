@@ -95,6 +95,15 @@ def create_app(config_class=Config) -> Flask:
             dt = dt.replace(tzinfo=_tz.utc)
         return dt.astimezone(ZoneInfo("America/New_York")).strftime("%-m/%-d %-I:%M %p")
 
+    # ── Update last_login on each authenticated request ────────────────────
+    @app.before_request
+    def _update_last_login():
+        user = get_current_user()
+        if user:
+            from datetime import datetime
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+
     # ── Gmail lazy-check (fires on requests when overdue) ─────────────────
     _wire_gmail_check(app)
 
@@ -205,6 +214,7 @@ def _migrate_schema(app: Flask) -> None:
         "ALTER TABLE regular_schedule ADD COLUMN frequency VARCHAR(20) DEFAULT 'weekly'",
         "ALTER TABLE regular_schedule ADD COLUMN start_week INTEGER",
         "ALTER TABLE regular_schedule ADD COLUMN start_date DATE",
+        "ALTER TABLE users ADD COLUMN last_login TIMESTAMP",
     ]
     for sql in migrations:
         try:
