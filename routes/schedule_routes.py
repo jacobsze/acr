@@ -8,6 +8,7 @@ from flask import (
 
 from models import db, User, RegularSchedule, ShiftAssignment, ScheduleChangeLog
 from auth_utils import login_required, owner_required, get_current_user
+from services.schedule_cron import should_schedule_on_week
 
 schedule_bp = Blueprint("schedule", __name__)
 
@@ -56,6 +57,8 @@ def materialize_if_needed(target_date: date, shift_type: str) -> None:
         .all()
     )
     for rs in regular_entries:
+        if not should_schedule_on_week(target_date, rs.frequency, rs.start_date):
+            continue
         db.session.add(
             ShiftAssignment(
                 date=target_date,
@@ -92,7 +95,7 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
     regular_by_dow: dict[tuple, list] = {}
     for rs in regular:
         key = (rs.day_of_week, rs.shift_type)
-        regular_by_dow.setdefault(key, []).append(rs.user)
+        regular_by_dow.setdefault(key, []).append(rs)
 
     # Get removals from change log - volunteers who removed themselves from specific dates
     removals = (
@@ -117,7 +120,12 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
                 volunteers = sorted(actual[key], key=lambda u: u.name)
                 is_tentative = False
             else:
-                volunteers = sorted(regular_by_dow.get((dow, shift_type), []), key=lambda u: u.name)
+                fallback_schedules = regular_by_dow.get((dow, shift_type), [])
+                volunteers = []
+                for rs in fallback_schedules:
+                    if should_schedule_on_week(d, rs.frequency, rs.start_date):
+                        volunteers.append(rs.user)
+                volunteers = sorted(volunteers, key=lambda u: u.name)
                 is_tentative = True
 
             # Filter out volunteers who removed themselves from this specific date,
@@ -186,7 +194,7 @@ def home():
     all_regular = RegularSchedule.query.join(User).filter(User.active.is_(True)).all()
     regular_by_dow: dict[tuple, list] = {}
     for rs in all_regular:
-        regular_by_dow.setdefault((rs.day_of_week, rs.shift_type), []).append(rs.user)
+        regular_by_dow.setdefault((rs.day_of_week, rs.shift_type), []).append(rs)
 
     days = []
     for i in range(28):
@@ -197,7 +205,12 @@ def home():
             if key in shift_map:
                 vols = sorted(shift_map[key], key=lambda u: u.name)
             else:
-                vols = sorted(regular_by_dow.get((d.weekday(), st), []), key=lambda u: u.name)
+                fallback_schedules = regular_by_dow.get((d.weekday(), st), [])
+                vols = []
+                for rs in fallback_schedules:
+                    if should_schedule_on_week(d, rs.frequency, rs.start_date):
+                        vols.append(rs.user)
+                vols = sorted(vols, key=lambda u: u.name)
             if any(v.id == g.effective_user.id for v in vols):
                 my_shifts.append({
                     "shift_type": st,
