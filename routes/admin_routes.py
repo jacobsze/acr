@@ -343,10 +343,10 @@ DAYS_DISPLAY = [
 @admin_bp.route("/bootstrap-schedule", methods=["POST"])
 @owner_required
 def bootstrap_schedule():
-    """One-time bootstrap: generate 52 weeks of ShiftAssignments from RegularSchedule.
+    """Bootstrap: generate 52 weeks of ShiftAssignments from RegularSchedule.
 
-    This is a one-time operation. After bootstrap, the Sunday cron extends the window.
-    Refuses to run if assignments already exist (to prevent overwriting volunteer edits).
+    Additive only — only fills in dates that don't have any assignments yet.
+    Never overwrites existing ShiftAssignments (whether from RegularSchedule or manual edits).
     """
     from datetime import timedelta
 
@@ -354,28 +354,30 @@ def bootstrap_schedule():
         today = date.today()
         end = today + timedelta(weeks=52)
 
-        # Safety check: refuse if assignments already exist
-        existing = ShiftAssignment.query.filter(
-            ShiftAssignment.date >= today,
-            ShiftAssignment.date < end,
-        ).count()
+        # Find all dates that already have ANY assignments
+        existing_dates = set(
+            row[0] for row in ShiftAssignment.query
+            .filter(ShiftAssignment.date >= today, ShiftAssignment.date < end)
+            .with_entities(ShiftAssignment.date)
+            .distinct()
+        )
 
-        if existing > 0:
-            flash(
-                f"Bootstrap aborted: {existing} assignments already exist in the 52-week window. "
-                "Use bootstrap only once at the start. The Sunday cron extends the schedule after that.",
-                "error"
-            )
-            return redirect(url_for("admin.regular_schedule"))
-
-        # Generate 52 weeks from RegularSchedule
+        # Generate 52 weeks, skipping dates that already have assignments
         assignments = 0
+        skipped = 0
+
         for week_offset in range(52):
             week_start = today + timedelta(weeks=week_offset)
             for day_offset in range(7):
                 target_date = week_start + timedelta(days=day_offset)
                 if target_date >= end:
                     break
+
+                # Skip dates that already have assignments
+                if target_date in existing_dates:
+                    skipped += 1
+                    continue
+
                 dow = target_date.weekday()
                 for shift_type in ("AM", "PM"):
                     reg_entries = (
@@ -395,8 +397,14 @@ def bootstrap_schedule():
                         assignments += 1
 
         db.session.commit()
-        flash(f"✓ Bootstrap complete: generated {assignments} assignments for 52 weeks.", "success")
-        current_app.logger.info("Bootstrap generated %d assignments", assignments)
+        flash(
+            f"✓ Bootstrap complete: generated {assignments} assignments, skipped {skipped} dates with existing assignments.",
+            "success"
+        )
+        current_app.logger.info(
+            "Bootstrap generated %d assignments, skipped %d dates with existing data",
+            assignments, skipped
+        )
 
     except Exception as exc:
         db.session.rollback()
