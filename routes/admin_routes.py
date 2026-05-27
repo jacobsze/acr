@@ -340,6 +340,63 @@ DAYS_DISPLAY = [
 ]
 
 
+@admin_bp.route("/bootstrap-schedule", methods=["POST"])
+@owner_required
+def bootstrap_schedule():
+    """One-time bootstrap: generate 52 weeks of ShiftAssignments from RegularSchedule."""
+    from datetime import timedelta
+
+    try:
+        today = date.today()
+        end = today + timedelta(weeks=52)
+
+        # Clear existing assignments in the window
+        deleted = ShiftAssignment.query.filter(
+            ShiftAssignment.date >= today,
+            ShiftAssignment.date < end,
+        ).delete()
+        db.session.commit()
+        if deleted:
+            current_app.logger.info("Cleared %d existing assignments for bootstrap", deleted)
+
+        # Generate 52 weeks from RegularSchedule
+        assignments = 0
+        for week_offset in range(52):
+            week_start = today + timedelta(weeks=week_offset)
+            for day_offset in range(7):
+                target_date = week_start + timedelta(days=day_offset)
+                if target_date >= end:
+                    break
+                dow = target_date.weekday()
+                for shift_type in ("AM", "PM"):
+                    reg_entries = (
+                        RegularSchedule.query
+                        .filter_by(day_of_week=dow, shift_type=shift_type)
+                        .join(User)
+                        .filter(User.active.is_(True))
+                        .all()
+                    )
+                    for rs in reg_entries:
+                        db.session.add(ShiftAssignment(
+                            date=target_date,
+                            shift_type=shift_type,
+                            user_id=rs.user_id,
+                            notes="Generated from regular schedule",
+                        ))
+                        assignments += 1
+
+        db.session.commit()
+        flash(f"✓ Bootstrap complete: generated {assignments} assignments for 52 weeks.", "success")
+        current_app.logger.info("Bootstrap generated %d assignments", assignments)
+
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"Bootstrap failed: {exc}", "error")
+        current_app.logger.exception("Bootstrap failed: %s", exc)
+
+    return redirect(url_for("admin.regular_schedule"))
+
+
 @admin_bp.route("/regular")
 @login_required
 def regular_schedule():
@@ -377,6 +434,8 @@ def regular_schedule():
 @admin_bp.route("/regular/save", methods=["POST"])
 @admin_required
 def save_regular_schedule():
+    from services.schedule_cron import handle_regular_schedule_change
+
     active_ids = {u.id for u in User.query.filter_by(active=True).all()}
     cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
 
@@ -402,21 +461,33 @@ def save_regular_schedule():
 
     for key, rs in current.items():
         if key not in new_set:
+            # Removal: cascade to ShiftAssignments
+            user_id, dow, shift_type = key
             db.session.delete(rs)
             db.session.add(ScheduleChangeLog(
-                log_type="regular", day_of_week=key[1], shift_type=key[2],
-                action="remove", volunteer_id=key[0],
-                volunteer_name=user_map.get(key[0], str(key[0])),
+                log_type="regular", day_of_week=dow, shift_type=shift_type,
+                action="remove", volunteer_id=user_id,
+                volunteer_name=user_map.get(user_id, str(user_id)),
                 changed_by_id=g.user.id,
             ))
+            # Cascade to ShiftAssignments (future only)
+            handle_regular_schedule_change(
+                current_app._get_current_object(),
+                action="remove",
+                user_id=user_id,
+                day_of_week=dow,
+                shift_type=shift_type,
+            )
 
     for key in new_set:
         if key not in current:
-            db.session.add(RegularSchedule(user_id=key[0], day_of_week=key[1], shift_type=key[2]))
+            # Addition: just update RegularSchedule; cron will generate assignments
+            user_id, dow, shift_type = key
+            db.session.add(RegularSchedule(user_id=user_id, day_of_week=dow, shift_type=shift_type))
             db.session.add(ScheduleChangeLog(
-                log_type="regular", day_of_week=key[1], shift_type=key[2],
-                action="add", volunteer_id=key[0],
-                volunteer_name=user_map.get(key[0], str(key[0])),
+                log_type="regular", day_of_week=dow, shift_type=shift_type,
+                action="add", volunteer_id=user_id,
+                volunteer_name=user_map.get(user_id, str(user_id)),
                 changed_by_id=g.user.id,
             ))
 
