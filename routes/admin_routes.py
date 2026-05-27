@@ -461,18 +461,36 @@ def save_regular_schedule():
     active_ids = {u.id for u in User.query.filter_by(active=True).all()}
     cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
 
-    new_set: set[tuple] = set()
+    # Build mapping: (dow, shift_type, slot_idx) -> (user_id, frequency, start_week)
+    slot_config = {}
     for dow in range(7):
         for shift_type in ("AM", "PM"):
             for slot_idx in range(cap):
                 val = request.form.get(f"spot_{dow}_{shift_type}_{slot_idx}", "").strip()
+                freq = request.form.get(f"freq_{dow}_{shift_type}_{slot_idx}", "weekly")
+                week = request.form.get(f"week_{dow}_{shift_type}_{slot_idx}", "0")
                 if val:
                     try:
                         uid = int(val)
                         if uid in active_ids:
-                            new_set.add((uid, dow, shift_type))
+                            slot_config[(dow, shift_type, slot_idx)] = {
+                                "user_id": uid,
+                                "frequency": freq,
+                                "start_week": int(week) if freq == "every_other_week" else None,
+                            }
                     except ValueError:
                         pass
+
+    # Build new_set and mapping from (uid, dow, shift_type) -> (frequency, start_week)
+    new_set: set[tuple] = set()
+    freq_by_entry = {}  # (uid, dow, shift_type) -> (frequency, start_week)
+    for (dow, shift_type, slot_idx), config in slot_config.items():
+        uid = config["user_id"]
+        key = (uid, dow, shift_type)
+        new_set.add(key)
+        # Use the first (lowest slot_idx) occurrence
+        if key not in freq_by_entry:
+            freq_by_entry[key] = (config["frequency"], config["start_week"])
 
     current = {
         (rs.user_id, rs.day_of_week, rs.shift_type): rs
@@ -505,7 +523,14 @@ def save_regular_schedule():
         if key not in current:
             # Addition: just update RegularSchedule; cron will generate assignments
             user_id, dow, shift_type = key
-            db.session.add(RegularSchedule(user_id=user_id, day_of_week=dow, shift_type=shift_type))
+            freq, start_week = freq_by_entry.get(key, ("weekly", None))
+            db.session.add(RegularSchedule(
+                user_id=user_id,
+                day_of_week=dow,
+                shift_type=shift_type,
+                frequency=freq,
+                start_week=start_week,
+            ))
             db.session.add(ScheduleChangeLog(
                 log_type="regular", day_of_week=dow, shift_type=shift_type,
                 action="add", volunteer_id=user_id,
