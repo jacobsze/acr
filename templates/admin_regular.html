@@ -19,6 +19,12 @@
     font-weight: bold;
     margin-left: 0.25rem;
   }
+  .sched-am-hdr {
+    background-color: #e8f4f8 !important;
+  }
+  .sched-pm-hdr {
+    background-color: #fef3e8 !important;
+  }
 </style>
 {% endif %}
 {% endblock %}
@@ -45,8 +51,8 @@
       <thead>
         <tr>
           <th class="regular-day-col" style="width:50px;"></th>
-          <th colspan="{{ cap * 2 }}" class="text-center sched-am-hdr fw-bold">AM Shift</th>
-          <th colspan="{{ cap * 2 }}" class="text-center sched-pm-hdr fw-bold">PM Shift</th>
+          <th colspan="4" class="text-center sched-am-hdr fw-bold" id="am-shift-header">AM Shift</th>
+          <th colspan="4" class="text-center sched-pm-hdr fw-bold" id="pm-shift-header">PM Shift</th>
         </tr>
         <tr>
           <th class="regular-day-col" style="width:50px;"></th>
@@ -179,8 +185,10 @@ document.querySelectorAll('.regular-freq-select').forEach(freqSel => {
   updateWeekVisibility();
 });
 
-// Toggle 3rd volunteer columns
+// Toggle 3rd volunteer columns and adjust colspan
 const toggleBtn = document.getElementById('toggle-slot-2-btn');
+const amHeader = document.getElementById('am-shift-header');
+const pmHeader = document.getElementById('pm-shift-header');
 let slot2Visible = false;
 toggleBtn.addEventListener('click', (e) => {
   e.preventDefault();
@@ -188,6 +196,10 @@ toggleBtn.addEventListener('click', (e) => {
   document.querySelectorAll('.slot-2-col').forEach(el => {
     el.classList.toggle('show', slot2Visible);
   });
+  // Update colspan to account for visible columns
+  const newColspan = slot2Visible ? 6 : 4;
+  amHeader.setAttribute('colspan', newColspan);
+  pmHeader.setAttribute('colspan', newColspan);
   toggleBtn.innerHTML = slot2Visible
     ? '<i class="bi bi-eye-slash"></i> Hide 3rd Volunteer'
     : '<i class="bi bi-eye"></i> Show 3rd Volunteer';
