@@ -69,8 +69,17 @@
       </tbody>
     </table>
   </div>
-  <button type="submit" class="btn acr-btn-primary">
-    <i class="bi bi-save"></i> Save Regular Schedule
+  <div class="d-flex gap-2 align-items-center">
+    <button type="submit" class="btn acr-btn-primary">
+      <i class="bi bi-save"></i> Save Regular Schedule
+    </button>
+  </div>
+</form>
+
+<form method="post" action="{{ url_for('admin.bootstrap_schedule') }}" style="display:inline;">
+  <button type="submit" class="btn btn-warning"
+          onclick="return confirm('This will generate 52 weeks of assignments from the regular schedule. Existing assignments will be replaced. Continue?')">
+    <i class="bi bi-lightning"></i> Bootstrap Schedule (52 weeks)
   </button>
 </form>
 </div>
