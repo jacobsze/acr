@@ -33,31 +33,29 @@ def extend_52week_schedule(app):
     """
     Generate the next week of ShiftAssignments to maintain ~52 weeks of future schedule.
 
-    Called weekly (Sundays). Finds the last date in the 52-week window and generates
+    Called weekly (Sundays). Finds the last week that was processed and generates
     the next week (7 days) based on current RegularSchedule.
     """
-    from models import db, RegularSchedule, ShiftAssignment, User
+    from models import db, RegularSchedule, ShiftAssignment, User, AppSetting
 
     with app.app_context():
         today = date.today()
 
-        # Find the furthest date currently scheduled
-        last_assignment = (
-            ShiftAssignment.query
-            .filter(ShiftAssignment.date >= today)
-            .order_by(ShiftAssignment.date.desc())
-            .first()
-        )
-
-        if last_assignment:
-            next_week_start = last_assignment.date + timedelta(days=1)
-            # Round to nearest Sunday if needed
-            days_until_sunday = (6 - next_week_start.weekday()) % 7
-            if days_until_sunday > 0:
-                next_week_start = next_week_start + timedelta(days=days_until_sunday)
+        # Get the last week we processed (tracks even if no assignments were made)
+        last_processed = AppSetting.query.get("last_processed_week_end")
+        if last_processed:
+            try:
+                last_date = date.fromisoformat(last_processed.value)
+                next_week_start = last_date + timedelta(days=1)
+            except (ValueError, AttributeError):
+                next_week_start = today
         else:
-            # No assignments exist yet — start from today
             next_week_start = today
+
+        # Ensure we start on a Sunday
+        days_until_sunday = (6 - next_week_start.weekday()) % 7
+        if days_until_sunday > 0:
+            next_week_start = next_week_start + timedelta(days=days_until_sunday)
 
         next_week_end = next_week_start + timedelta(days=6)
 
@@ -109,6 +107,13 @@ def extend_52week_schedule(app):
                     ))
                     assignments_added += 1
 
+        # Update the last processed week tracker
+        last_processed = AppSetting.query.get("last_processed_week_end")
+        if not last_processed:
+            last_processed = AppSetting(key="last_processed_week_end", value=str(next_week_end))
+            db.session.add(last_processed)
+        else:
+            last_processed.value = str(next_week_end)
         db.session.commit()
 
         app.logger.info(

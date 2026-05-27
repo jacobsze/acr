@@ -199,19 +199,19 @@ def _migrate_schema(app: Flask) -> None:
     """Apply incremental schema changes not handled by db.create_all()."""
     from sqlalchemy import text
     migrations = [
-        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS shift_type VARCHAR(2)",
-        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS bowel_movement VARCHAR(100)",
-        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS food_intake VARCHAR(20)",
-        "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS frequency VARCHAR(20) DEFAULT 'weekly'",
-        "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS start_week INTEGER",
-        "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS start_date DATE",
+        "ALTER TABLE cat_logs ADD COLUMN shift_type VARCHAR(2)",
+        "ALTER TABLE cat_logs ADD COLUMN bowel_movement VARCHAR(100)",
+        "ALTER TABLE cat_logs ADD COLUMN food_intake VARCHAR(20)",
+        "ALTER TABLE regular_schedule ADD COLUMN frequency VARCHAR(20) DEFAULT 'weekly'",
+        "ALTER TABLE regular_schedule ADD COLUMN start_week INTEGER",
+        "ALTER TABLE regular_schedule ADD COLUMN start_date DATE",
     ]
     with db.engine.connect() as conn:
         for sql in migrations:
             try:
                 conn.execute(text(sql))
             except Exception:
-                pass
+                pass  # Column may already exist
         conn.commit()
 
 
