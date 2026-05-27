@@ -343,21 +343,30 @@ DAYS_DISPLAY = [
 @admin_bp.route("/bootstrap-schedule", methods=["POST"])
 @owner_required
 def bootstrap_schedule():
-    """One-time bootstrap: generate 52 weeks of ShiftAssignments from RegularSchedule."""
+    """One-time bootstrap: generate 52 weeks of ShiftAssignments from RegularSchedule.
+
+    This is a one-time operation. After bootstrap, the Sunday cron extends the window.
+    Refuses to run if assignments already exist (to prevent overwriting volunteer edits).
+    """
     from datetime import timedelta
 
     try:
         today = date.today()
         end = today + timedelta(weeks=52)
 
-        # Clear existing assignments in the window
-        deleted = ShiftAssignment.query.filter(
+        # Safety check: refuse if assignments already exist
+        existing = ShiftAssignment.query.filter(
             ShiftAssignment.date >= today,
             ShiftAssignment.date < end,
-        ).delete()
-        db.session.commit()
-        if deleted:
-            current_app.logger.info("Cleared %d existing assignments for bootstrap", deleted)
+        ).count()
+
+        if existing > 0:
+            flash(
+                f"Bootstrap aborted: {existing} assignments already exist in the 52-week window. "
+                "Use bootstrap only once at the start. The Sunday cron extends the schedule after that.",
+                "error"
+            )
+            return redirect(url_for("admin.regular_schedule"))
 
         # Generate 52 weeks from RegularSchedule
         assignments = 0

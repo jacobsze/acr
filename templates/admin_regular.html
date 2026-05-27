@@ -78,8 +78,8 @@
 
 <form method="post" action="{{ url_for('admin.bootstrap_schedule') }}" style="display:inline;">
   <button type="submit" class="btn btn-warning"
-          onclick="return confirm('This will generate 52 weeks of assignments from the regular schedule. Existing assignments will be replaced. Continue?')">
-    <i class="bi bi-lightning"></i> Bootstrap Schedule (52 weeks)
+          onclick="return confirm('This is a ONE-TIME operation that generates 52 weeks from the regular schedule. After this, the Sunday cron will extend by 1 week each week. Continue?')">
+    <i class="bi bi-lightning"></i> Bootstrap Schedule (52 weeks, one-time only)
   </button>
 </form>
 </div>
