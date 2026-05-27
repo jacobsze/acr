@@ -206,13 +206,12 @@ def _migrate_schema(app: Flask) -> None:
         "ALTER TABLE regular_schedule ADD COLUMN start_week INTEGER",
         "ALTER TABLE regular_schedule ADD COLUMN start_date DATE",
     ]
-    with db.engine.connect() as conn:
-        for sql in migrations:
-            try:
+    for sql in migrations:
+        try:
+            with db.engine.begin() as conn:
                 conn.execute(text(sql))
-            except Exception:
-                pass  # Column may already exist
-        conn.commit()
+        except Exception:
+            pass  # Column already exists
 
 
 def _ensure_owner_exists(app: Flask) -> None:
