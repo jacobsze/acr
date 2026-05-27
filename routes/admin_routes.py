@@ -550,9 +550,10 @@ def save_regular_schedule():
                 shift_type=shift_type,
             )
 
+    new_entries = []
     for key in new_set:
         if key not in current:
-            # Addition: just update RegularSchedule; cron will generate assignments
+            # Addition: update RegularSchedule and immediately generate assignments
             user_id, dow, shift_type = key
             freq, start_dt = freq_by_entry.get(key, ("weekly", None))
             db.session.add(RegularSchedule(
@@ -568,8 +569,22 @@ def save_regular_schedule():
                 volunteer_name=user_map.get(user_id, str(user_id)),
                 changed_by_id=g.user.id,
             ))
+            new_entries.append((user_id, dow, shift_type, freq, start_dt))
 
     db.session.commit()
+
+    # Immediately generate assignments for newly added volunteers
+    for user_id, dow, shift_type, freq, start_dt in new_entries:
+        handle_regular_schedule_change(
+            current_app._get_current_object(),
+            action="add",
+            user_id=user_id,
+            day_of_week=dow,
+            shift_type=shift_type,
+            frequency=freq,
+            start_date=start_dt,
+        )
+
     flash("Regular schedule saved.", "success")
     return redirect(url_for("admin.regular_schedule"))
 
