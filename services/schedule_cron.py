@@ -5,15 +5,14 @@ from datetime import date, timedelta
 logger = logging.getLogger(__name__)
 
 
-def should_schedule_on_week(target_date: date, bootstrap_date: date, frequency: str, start_week: int = 0) -> bool:
+def should_schedule_on_week(target_date: date, frequency: str, start_date: date = None) -> bool:
     """
     Determine if a volunteer should be scheduled on a given date based on frequency.
 
     Args:
         target_date: the date to check
-        bootstrap_date: the reference date when schedules started
         frequency: 'weekly' or 'every_other_week'
-        start_week: for every_other_week, which week to start (0 = first, 1 = second)
+        start_date: for every_other_week, the actual start date (epoch)
 
     Returns:
         True if the volunteer should be scheduled on this date
@@ -21,13 +20,11 @@ def should_schedule_on_week(target_date: date, bootstrap_date: date, frequency: 
     if frequency == "weekly":
         return True
 
-    if frequency == "every_other_week":
-        # Calculate which week (0, 1, 2, ...) this date falls into
-        weeks_since_bootstrap = (target_date - bootstrap_date).days // 7
-        week_parity = weeks_since_bootstrap % 2
-        # If start_week is 0, they work on even-numbered weeks (0, 2, 4...)
-        # If start_week is 1, they work on odd-numbered weeks (1, 3, 5...)
-        return week_parity == start_week
+    if frequency == "every_other_week" and start_date:
+        # Calculate weeks since the start date
+        weeks_since_start = (target_date - start_date).days // 7
+        # Schedule on even-numbered weeks (0, 2, 4, ...) from start_date
+        return weeks_since_start % 2 == 0
 
     return False
 
@@ -43,8 +40,6 @@ def extend_52week_schedule(app):
 
     with app.app_context():
         today = date.today()
-        # Fixed epoch for bi-weekly calculations (ensures consistency across cron runs)
-        bootstrap_epoch = date(2026, 1, 1)
 
         # Find the furthest date currently scheduled
         last_assignment = (
@@ -103,7 +98,7 @@ def extend_52week_schedule(app):
 
                 for rs in reg_entries:
                     # Check if this date should be scheduled based on frequency
-                    if not should_schedule_on_week(target_date, bootstrap_epoch, rs.frequency, rs.start_week or 0):
+                    if not should_schedule_on_week(target_date, rs.frequency, rs.start_date):
                         continue
 
                     db.session.add(ShiftAssignment(

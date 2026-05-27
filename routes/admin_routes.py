@@ -354,8 +354,6 @@ def bootstrap_schedule():
     try:
         today = date.today()
         end = today + timedelta(weeks=52)
-        # Fixed epoch for bi-weekly calculations (ensures consistency across runs)
-        bootstrap_epoch = date(2026, 1, 1)
 
         # Find all dates that already have ANY assignments
         existing_dates = set(
@@ -392,7 +390,7 @@ def bootstrap_schedule():
                     )
                     for rs in reg_entries:
                         # Check if this date should be scheduled based on frequency
-                        if not should_schedule_on_week(target_date, bootstrap_epoch, rs.frequency, rs.start_week or 0):
+                        if not should_schedule_on_week(target_date, rs.frequency, rs.start_date):
                             continue
 
                         db.session.add(ShiftAssignment(
@@ -479,7 +477,17 @@ def save_regular_schedule():
     active_ids = {u.id for u in User.query.filter_by(active=True).all()}
     cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
 
-    # Build mapping: (dow, shift_type, slot_idx) -> (user_id, frequency, start_week)
+    # Calculate next occurrence of each day of week (for start_date calculation)
+    today = date.today()
+    next_dates = {}  # day_of_week -> (week0_date, week1_date)
+    for dow in range(7):
+        days_ahead = (dow - today.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        next_occurrence = today + timedelta(days=days_ahead)
+        next_dates[dow] = (next_occurrence, next_occurrence + timedelta(weeks=1))
+
+    # Build mapping: (dow, shift_type, slot_idx) -> (user_id, frequency, start_date)
     slot_config = {}
     for dow in range(7):
         for shift_type in ("AM", "PM"):
@@ -491,24 +499,29 @@ def save_regular_schedule():
                     try:
                         uid = int(val)
                         if uid in active_ids:
+                            # Calculate actual start_date based on start_week selection
+                            start_date = None
+                            if freq == "every_other_week":
+                                week_idx = int(week) if week in ("0", "1") else 0
+                                start_date = next_dates[dow][week_idx]
                             slot_config[(dow, shift_type, slot_idx)] = {
                                 "user_id": uid,
                                 "frequency": freq,
-                                "start_week": int(week) if freq == "every_other_week" else None,
+                                "start_date": start_date,
                             }
                     except ValueError:
                         pass
 
-    # Build new_set and mapping from (uid, dow, shift_type) -> (frequency, start_week)
+    # Build new_set and mapping from (uid, dow, shift_type) -> (frequency, start_date)
     new_set: set[tuple] = set()
-    freq_by_entry = {}  # (uid, dow, shift_type) -> (frequency, start_week)
+    freq_by_entry = {}  # (uid, dow, shift_type) -> (frequency, start_date)
     for (dow, shift_type, slot_idx), config in slot_config.items():
         uid = config["user_id"]
         key = (uid, dow, shift_type)
         new_set.add(key)
         # Use the first (lowest slot_idx) occurrence
         if key not in freq_by_entry:
-            freq_by_entry[key] = (config["frequency"], config["start_week"])
+            freq_by_entry[key] = (config["frequency"], config["start_date"])
 
     current = {
         (rs.user_id, rs.day_of_week, rs.shift_type): rs
@@ -541,13 +554,13 @@ def save_regular_schedule():
         if key not in current:
             # Addition: just update RegularSchedule; cron will generate assignments
             user_id, dow, shift_type = key
-            freq, start_week = freq_by_entry.get(key, ("weekly", None))
+            freq, start_dt = freq_by_entry.get(key, ("weekly", None))
             db.session.add(RegularSchedule(
                 user_id=user_id,
                 day_of_week=dow,
                 shift_type=shift_type,
                 frequency=freq,
-                start_week=start_week,
+                start_date=start_dt,
             ))
             db.session.add(ScheduleChangeLog(
                 log_type="regular", day_of_week=dow, shift_type=shift_type,

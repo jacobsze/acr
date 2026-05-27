@@ -204,6 +204,7 @@ def _migrate_schema(app: Flask) -> None:
         "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS food_intake VARCHAR(20)",
         "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS frequency VARCHAR(20) DEFAULT 'weekly'",
         "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS start_week INTEGER",
+        "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS start_date DATE",
     ]
     with db.engine.connect() as conn:
         for sql in migrations:
