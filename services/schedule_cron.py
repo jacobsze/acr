@@ -43,6 +43,8 @@ def extend_52week_schedule(app):
 
     with app.app_context():
         today = date.today()
+        # Fixed epoch for bi-weekly calculations (ensures consistency across cron runs)
+        bootstrap_epoch = date(2026, 1, 1)
 
         # Find the furthest date currently scheduled
         last_assignment = (
@@ -101,7 +103,7 @@ def extend_52week_schedule(app):
 
                 for rs in reg_entries:
                     # Check if this date should be scheduled based on frequency
-                    if not should_schedule_on_week(target_date, today, rs.frequency, rs.start_week or 0):
+                    if not should_schedule_on_week(target_date, bootstrap_epoch, rs.frequency, rs.start_week or 0):
                         continue
 
                     db.session.add(ShiftAssignment(
