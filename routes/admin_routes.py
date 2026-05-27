@@ -6,7 +6,7 @@ from flask import (
 )
 from sqlalchemy import func
 
-from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog, AppSetting
+from models import db, User, RegularSchedule, ShiftAssignment, EmailProcessingLog, ScheduleChangeLog, AppSetting, Cat, CatLog
 from auth_utils import login_required, admin_required, owner_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -29,24 +29,130 @@ def normalize_phone(raw: str) -> tuple[str, str]:
 @admin_bp.route("/analyze-cat-emails", methods=["GET"])
 @owner_required
 def analyze_cat_emails():
-    """Analyze past emails to extract cat information and show token costs."""
+    """Analyze past emails to extract cat information and save to database.
+
+    Query params:
+      days_back=N  — how many days back to look (default 21)
+      force_since=YYYY-MM-DD  — delete existing CatLogs on/after this date and re-analyze
+    """
     from services.cat_analyzer import analyze_emails_for_cats
+    from datetime import date as _date
+
+    days_back = int(request.args.get("days_back", 21))
+    force_since_raw = request.args.get("force_since", "").strip()
+    force_since = None
+    if force_since_raw:
+        try:
+            force_since = _date.fromisoformat(force_since_raw)
+            # Make days_back wide enough to cover force_since
+            days_since = (_date.today() - force_since).days + 1
+            days_back = max(days_back, days_since)
+        except ValueError:
+            flash(f"Invalid force_since date: {force_since_raw}", "error")
+            return redirect(url_for("admin.cats"))
 
     try:
-        # Analyze past 3 weeks, sample 5 for testing
-        result = analyze_emails_for_cats(current_app._get_current_object(), days_back=21, sample_size=5)
-
-        avg_cost = result['total_cost'] / result['total_emails'] if result['total_emails'] > 0 else 0
-
+        result = analyze_emails_for_cats(
+            current_app._get_current_object(),
+            days_back=days_back,
+            force_since=force_since,
+        )
         return render_template(
             "admin_cat_analysis.html",
             result=result,
-            avg_cost_per_email=avg_cost,
+            force_since=force_since,
         )
     except Exception as e:
         flash(f"Analysis failed: {str(e)}", "error")
         current_app.logger.exception("Cat email analysis failed: %s", str(e))
-        return redirect(url_for("admin.dashboard"))
+        return redirect(url_for("admin.cats"))
+
+
+@admin_bp.route("/cats", methods=["GET"])
+@admin_required
+def cats():
+    """Cat activity matrix: last 7 days × all cats."""
+    today = date.today()
+    days = [today - timedelta(days=i) for i in range(7)]
+
+    all_cats = Cat.query.order_by(Cat.name).all()
+    email_to_name = {u.email.lower(): u.name for u in User.query.filter_by(active=True).all()}
+
+    logs = (
+        CatLog.query
+        .filter(CatLog.date.in_(days))
+        .order_by(CatLog.date.desc(), CatLog.created_at.asc())
+        .all()
+    )
+
+    # {(date, shift_type): {cat_id: {notes, bowel, food}}}
+    from collections import defaultdict
+    matrix = defaultdict(dict)
+    volunteer_by_slot = {}
+    for log in logs:
+        shift = getattr(log, "shift_type", None) or "AM"
+        key = (log.date, shift)
+        if log.cat_id not in matrix[key]:
+            matrix[key][log.cat_id] = {
+                "notes": log.notes,
+                "bowel": log.bowel_movement,
+                "food": log.food_intake,
+            }
+        raw_vol = (log.volunteer_name or "").lower()
+        if key not in volunteer_by_slot:
+            volunteer_by_slot[key] = email_to_name.get(raw_vol, log.volunteer_name or "—")
+
+    rows = []
+    for d in days:
+        for shift in ("PM", "AM"):   # PM first — afternoon is more recent
+            key = (d, shift)
+            cells = {}
+            for cat in all_cats:
+                cells[cat.id] = matrix[key].get(cat.id)
+            rows.append({
+                "date": d,
+                "shift": shift,
+                "volunteer": volunteer_by_slot.get(key, "—"),
+                "cells": cells,
+            })
+
+    return render_template(
+        "admin_cats.html",
+        cats=all_cats,
+        rows=rows,
+    )
+
+
+@admin_bp.route("/cats/<int:cat_id>", methods=["GET"])
+@admin_required
+def cat_detail(cat_id):
+    """View detailed history for a specific cat."""
+    cat = Cat.query.get_or_404(cat_id)
+    email_to_name = {u.email.lower(): u.name for u in User.query.filter_by(active=True).all()}
+
+    logs = (
+        CatLog.query
+        .filter_by(cat_id=cat_id)
+        .order_by(CatLog.date.desc(), CatLog.created_at.asc())
+        .all()
+    )
+
+    enriched = []
+    for log in logs:
+        raw_vol = (log.volunteer_name or "").lower()
+        enriched.append({
+            "log": log,
+            "shift": getattr(log, "shift_type", None) or "—",
+            "volunteer": email_to_name.get(raw_vol, log.volunteer_name or "—"),
+            "bowel": log.bowel_movement,
+            "food": log.food_intake,
+        })
+
+    return render_template(
+        "admin_cat_detail.html",
+        cat=cat,
+        logs=enriched,
+    )
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -234,9 +340,92 @@ DAYS_DISPLAY = [
 ]
 
 
+@admin_bp.route("/bootstrap-schedule", methods=["POST"])
+@owner_required
+def bootstrap_schedule():
+    """Bootstrap: generate 52 weeks of ShiftAssignments from RegularSchedule.
+
+    Additive only — only fills in dates that don't have any assignments yet.
+    Never overwrites existing ShiftAssignments (whether from RegularSchedule or manual edits).
+    """
+    from datetime import timedelta
+    from services.schedule_cron import should_schedule_on_week
+
+    try:
+        today = date.today()
+        end = today + timedelta(weeks=52)
+        # Fixed epoch for bi-weekly calculations (ensures consistency across runs)
+        bootstrap_epoch = date(2026, 1, 1)
+
+        # Find all dates that already have ANY assignments
+        existing_dates = set(
+            row[0] for row in ShiftAssignment.query
+            .filter(ShiftAssignment.date >= today, ShiftAssignment.date < end)
+            .with_entities(ShiftAssignment.date)
+            .distinct()
+        )
+
+        # Generate 52 weeks, skipping dates that already have assignments
+        assignments = 0
+        skipped = 0
+
+        for week_offset in range(52):
+            week_start = today + timedelta(weeks=week_offset)
+            for day_offset in range(7):
+                target_date = week_start + timedelta(days=day_offset)
+                if target_date >= end:
+                    break
+
+                # Skip dates that already have assignments
+                if target_date in existing_dates:
+                    skipped += 1
+                    continue
+
+                dow = target_date.weekday()
+                for shift_type in ("AM", "PM"):
+                    reg_entries = (
+                        RegularSchedule.query
+                        .filter_by(day_of_week=dow, shift_type=shift_type)
+                        .join(User)
+                        .filter(User.active.is_(True))
+                        .all()
+                    )
+                    for rs in reg_entries:
+                        # Check if this date should be scheduled based on frequency
+                        if not should_schedule_on_week(target_date, bootstrap_epoch, rs.frequency, rs.start_week or 0):
+                            continue
+
+                        db.session.add(ShiftAssignment(
+                            date=target_date,
+                            shift_type=shift_type,
+                            user_id=rs.user_id,
+                            notes="Generated from regular schedule",
+                        ))
+                        assignments += 1
+
+        db.session.commit()
+        flash(
+            f"✓ Bootstrap complete: generated {assignments} assignments, skipped {skipped} dates with existing assignments.",
+            "success"
+        )
+        current_app.logger.info(
+            "Bootstrap generated %d assignments, skipped %d dates with existing data",
+            assignments, skipped
+        )
+
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"Bootstrap failed: {exc}", "error")
+        current_app.logger.exception("Bootstrap failed: %s", exc)
+
+    return redirect(url_for("admin.regular_schedule"))
+
+
 @admin_bp.route("/regular")
 @login_required
 def regular_schedule():
+    from datetime import date as _date, timedelta
+
     volunteers = (
         User.query
         .filter(User.active.is_(True))
@@ -258,6 +447,19 @@ def regular_schedule():
     for key in regular_by_slot:
         regular_by_slot[key].sort(key=lambda u: u.name)
 
+    # Calculate the next occurrence of each day_of_week for date display
+    today = _date.today()
+    next_dates = {}  # day_of_week -> [date for week 0, date for week 1]
+    for dow in range(7):
+        # Find the next occurrence of this day of week
+        days_ahead = (dow - today.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7  # If today is that day, get next week
+        next_occurrence = today + timedelta(days=days_ahead)
+        week0_date = next_occurrence
+        week1_date = next_occurrence + timedelta(weeks=1)
+        next_dates[dow] = (week0_date, week1_date)
+
     return render_template(
         "admin_regular.html",
         volunteers=volunteers,
@@ -265,27 +467,48 @@ def regular_schedule():
         days_display=DAYS_DISPLAY,
         cap=cap,
         is_admin=g.user.is_admin_or_owner(),
+        next_dates=next_dates,
     )
 
 
 @admin_bp.route("/regular/save", methods=["POST"])
 @admin_required
 def save_regular_schedule():
+    from services.schedule_cron import handle_regular_schedule_change
+
     active_ids = {u.id for u in User.query.filter_by(active=True).all()}
     cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
 
-    new_set: set[tuple] = set()
+    # Build mapping: (dow, shift_type, slot_idx) -> (user_id, frequency, start_week)
+    slot_config = {}
     for dow in range(7):
         for shift_type in ("AM", "PM"):
             for slot_idx in range(cap):
                 val = request.form.get(f"spot_{dow}_{shift_type}_{slot_idx}", "").strip()
+                freq = request.form.get(f"freq_{dow}_{shift_type}_{slot_idx}", "weekly")
+                week = request.form.get(f"week_{dow}_{shift_type}_{slot_idx}", "0")
                 if val:
                     try:
                         uid = int(val)
                         if uid in active_ids:
-                            new_set.add((uid, dow, shift_type))
+                            slot_config[(dow, shift_type, slot_idx)] = {
+                                "user_id": uid,
+                                "frequency": freq,
+                                "start_week": int(week) if freq == "every_other_week" else None,
+                            }
                     except ValueError:
                         pass
+
+    # Build new_set and mapping from (uid, dow, shift_type) -> (frequency, start_week)
+    new_set: set[tuple] = set()
+    freq_by_entry = {}  # (uid, dow, shift_type) -> (frequency, start_week)
+    for (dow, shift_type, slot_idx), config in slot_config.items():
+        uid = config["user_id"]
+        key = (uid, dow, shift_type)
+        new_set.add(key)
+        # Use the first (lowest slot_idx) occurrence
+        if key not in freq_by_entry:
+            freq_by_entry[key] = (config["frequency"], config["start_week"])
 
     current = {
         (rs.user_id, rs.day_of_week, rs.shift_type): rs
@@ -296,21 +519,40 @@ def save_regular_schedule():
 
     for key, rs in current.items():
         if key not in new_set:
+            # Removal: cascade to ShiftAssignments
+            user_id, dow, shift_type = key
             db.session.delete(rs)
             db.session.add(ScheduleChangeLog(
-                log_type="regular", day_of_week=key[1], shift_type=key[2],
-                action="remove", volunteer_id=key[0],
-                volunteer_name=user_map.get(key[0], str(key[0])),
+                log_type="regular", day_of_week=dow, shift_type=shift_type,
+                action="remove", volunteer_id=user_id,
+                volunteer_name=user_map.get(user_id, str(user_id)),
                 changed_by_id=g.user.id,
             ))
+            # Cascade to ShiftAssignments (future only)
+            handle_regular_schedule_change(
+                current_app._get_current_object(),
+                action="remove",
+                user_id=user_id,
+                day_of_week=dow,
+                shift_type=shift_type,
+            )
 
     for key in new_set:
         if key not in current:
-            db.session.add(RegularSchedule(user_id=key[0], day_of_week=key[1], shift_type=key[2]))
+            # Addition: just update RegularSchedule; cron will generate assignments
+            user_id, dow, shift_type = key
+            freq, start_week = freq_by_entry.get(key, ("weekly", None))
+            db.session.add(RegularSchedule(
+                user_id=user_id,
+                day_of_week=dow,
+                shift_type=shift_type,
+                frequency=freq,
+                start_week=start_week,
+            ))
             db.session.add(ScheduleChangeLog(
-                log_type="regular", day_of_week=key[1], shift_type=key[2],
-                action="add", volunteer_id=key[0],
-                volunteer_name=user_map.get(key[0], str(key[0])),
+                log_type="regular", day_of_week=dow, shift_type=shift_type,
+                action="add", volunteer_id=user_id,
+                volunteer_name=user_map.get(user_id, str(user_id)),
                 changed_by_id=g.user.id,
             ))
 

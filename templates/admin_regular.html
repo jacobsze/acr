@@ -4,6 +4,22 @@
 {% block head_extra %}
 {% if is_admin %}
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<style>
+  .slot-2-col { display: none; }
+  .slot-2-col.show { display: table-cell; }
+  .volunteer-badge {
+    display: inline-block;
+    background: #ff6b6b;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin-left: 0.25rem;
+  }
+</style>
 {% endif %}
 {% endblock %}
 
@@ -22,22 +38,25 @@
 </div>
 
 {% if is_admin %}
-<div style="max-width:900px; margin:0 auto;">
+<div style="max-width:1400px; margin:0 auto;">
 <form method="post" action="{{ url_for('admin.save_regular_schedule') }}">
   <div class="table-responsive mb-3">
     <table class="table table-bordered align-middle regular-sched-table">
       <thead>
         <tr>
-          <th class="regular-day-col" style="width:30px;"></th>
-          <th colspan="{{ cap }}" class="text-center sched-am-hdr fw-bold">AM Shift</th>
-          <th colspan="{{ cap }}" class="text-center sched-pm-hdr fw-bold">PM Shift</th>
+          <th class="regular-day-col" style="width:50px;"></th>
+          <th colspan="{{ cap * 2 }}" class="text-center sched-am-hdr fw-bold">AM Shift</th>
+          <th colspan="{{ cap * 2 }}" class="text-center sched-pm-hdr fw-bold">PM Shift</th>
         </tr>
         <tr>
-          <th class="regular-day-col" style="width:30px;"></th>
+          <th class="regular-day-col" style="width:50px;"></th>
           {% for shift_type in ['AM', 'PM'] %}
             {% for slot_idx in range(cap) %}
-              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.8rem;">
-                Spot {{ slot_idx + 1 }}
+              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold {% if slot_idx == 2 %}slot-2-col{% endif %}" style="font-size:.75rem; min-width:160px;">
+                Volunteer
+              </th>
+              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold {% if slot_idx == 2 %}slot-2-col{% endif %}" style="font-size:.75rem; min-width:140px;">
+                Schedule
               </th>
             {% endfor %}
           {% endfor %}
@@ -45,13 +64,20 @@
       </thead>
       <tbody>
         {% for dow, day_name in days_display %}
+        {% set dates = next_dates.get(dow, (none, none)) %}
         <tr>
-          <td class="regular-day-col"><span class="regular-dow-label">{{ day_name }}</span></td>
+          <td class="regular-day-col">
+            <span class="regular-dow-label">{{ day_name }}</span>
+            {% set am_vol_count = regular_by_slot.get((dow, 'AM'), [])|length %}
+            {% set pm_vol_count = regular_by_slot.get((dow, 'PM'), [])|length %}
+            {% if am_vol_count > 2 %}<span class="volunteer-badge" title="3 volunteers on AM">3</span>{% endif %}
+            {% if pm_vol_count > 2 %}<span class="volunteer-badge" title="3 volunteers on PM">3</span>{% endif %}
+          </td>
           {% for shift_type in ['AM', 'PM'] %}
             {% set slot_vols = regular_by_slot.get((dow, shift_type), []) %}
             {% for slot_idx in range(cap) %}
               {% set av = slot_vols[slot_idx] if slot_idx < slot_vols|length else none %}
-              <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}">
+              <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %} {% if slot_idx == 2 %}slot-2-col{% endif %}" style="padding:0.3rem;">
                 <select name="spot_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
                         class="regular-slot-select form-select form-select-sm">
                   <option value=""></option>
@@ -62,6 +88,18 @@
                   {% endfor %}
                 </select>
               </td>
+              <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %} {% if slot_idx == 2 %}slot-2-col{% endif %}" style="padding:0.3rem;">
+                <select name="freq_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
+                        class="regular-freq-select form-select form-select-sm">
+                  <option value="weekly" selected>Every week</option>
+                  <option value="every_other_week">Every other</option>
+                </select>
+                <select name="week_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
+                        class="regular-week-select form-select form-select-sm mt-1" style="display:none;">
+                  <option value="0">Start {{ dates[0].strftime('%-m/%-d') if dates[0] else '?' }}</option>
+                  <option value="1">Start {{ dates[1].strftime('%-m/%-d') if dates[1] else '?' }}</option>
+                </select>
+              </td>
             {% endfor %}
           {% endfor %}
         </tr>
@@ -69,9 +107,14 @@
       </tbody>
     </table>
   </div>
-  <button type="submit" class="btn acr-btn-primary">
-    <i class="bi bi-save"></i> Save Regular Schedule
-  </button>
+  <div class="d-flex gap-2 align-items-center">
+    <button type="submit" class="btn acr-btn-primary">
+      <i class="bi bi-save"></i> Save Regular Schedule
+    </button>
+    <button type="button" id="toggle-slot-2-btn" class="btn btn-outline-secondary">
+      <i class="bi bi-eye"></i> Show 3rd Volunteer
+    </button>
+  </div>
 </form>
 </div>
 
@@ -120,6 +163,34 @@ document.querySelectorAll('.regular-slot-select').forEach(sel => {
     maxOptions: null,
     placeholder: '',
   });
+});
+
+// Handle frequency/week selector visibility
+document.querySelectorAll('.regular-freq-select').forEach(freqSel => {
+  const weekSel = freqSel.nextElementSibling;
+  function updateWeekVisibility() {
+    if (freqSel.value === 'every_other_week') {
+      weekSel.style.display = 'block';
+    } else {
+      weekSel.style.display = 'none';
+    }
+  }
+  freqSel.addEventListener('change', updateWeekVisibility);
+  updateWeekVisibility();
+});
+
+// Toggle 3rd volunteer columns
+const toggleBtn = document.getElementById('toggle-slot-2-btn');
+let slot2Visible = false;
+toggleBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  slot2Visible = !slot2Visible;
+  document.querySelectorAll('.slot-2-col').forEach(el => {
+    el.classList.toggle('show', slot2Visible);
+  });
+  toggleBtn.innerHTML = slot2Visible
+    ? '<i class="bi bi-eye-slash"></i> Hide 3rd Volunteer'
+    : '<i class="bi bi-eye"></i> Show 3rd Volunteer';
 });
 </script>
 {% endif %}

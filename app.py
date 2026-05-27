@@ -37,6 +37,7 @@ def create_app(config_class=Config) -> Flask:
     db.init_app(app)
     with app.app_context():
         db.create_all()
+        _migrate_schema(app)
         _ensure_owner_exists(app)
         _log_db_backend(app)
 
@@ -161,6 +162,7 @@ def _start_open_shift_cron(app: Flask) -> None:
         from apscheduler.triggers.cron import CronTrigger
         from zoneinfo import ZoneInfo
         from services.weekly_email import check_and_send_open_shift_alert, send_weekly_schedule_email
+        from services.schedule_cron import extend_52week_schedule
 
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(
@@ -177,13 +179,39 @@ def _start_open_shift_cron(app: Flask) -> None:
             id="weekly_schedule_email",
             replace_existing=True,
         )
+        scheduler.add_job(
+            func=extend_52week_schedule,
+            args=[app],
+            trigger=CronTrigger(day_of_week="sun", hour=8, minute=0, timezone=ZoneInfo("America/New_York")),
+            id="extend_52week_schedule",
+            replace_existing=True,
+        )
         scheduler.start()
         app.email_scheduler = scheduler
-        app.logger.info("Email crons started (open-shift 10am ET daily, weekly schedule 9am ET Sundays).")
+        app.logger.info("Crons started (52-week 8am ET Sundays, weekly schedule 9am ET Sundays, open-shift 10am ET daily).")
     except ImportError:
         app.logger.warning("APScheduler not installed – open-shift alert disabled.")
     except Exception as exc:
         app.logger.error("Failed to start open-shift cron: %s", exc)
+
+
+def _migrate_schema(app: Flask) -> None:
+    """Apply incremental schema changes not handled by db.create_all()."""
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS shift_type VARCHAR(2)",
+        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS bowel_movement VARCHAR(100)",
+        "ALTER TABLE cat_logs ADD COLUMN IF NOT EXISTS food_intake VARCHAR(20)",
+        "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS frequency VARCHAR(20) DEFAULT 'weekly'",
+        "ALTER TABLE regular_schedule ADD COLUMN IF NOT EXISTS start_week INTEGER",
+    ]
+    with db.engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+            except Exception:
+                pass
+        conn.commit()
 
 
 def _ensure_owner_exists(app: Flask) -> None:

@@ -45,6 +45,10 @@ class RegularSchedule(db.Model):
     # 0 = Monday … 6 = Sunday
     day_of_week = db.Column(db.Integer, nullable=False)
     shift_type = db.Column(db.String(2), nullable=False)  # AM | PM
+    # Frequency: "weekly" (default) or "every_other_week"
+    frequency = db.Column(db.String(20), nullable=False, default="weekly")
+    # For every_other_week: which week to start (0 or 1, relative to bootstrap date)
+    start_week = db.Column(db.Integer, nullable=True)  # 0 = first week, 1 = second week
 
     user = db.relationship("User", back_populates="regular_shifts", foreign_keys=[user_id])
 
@@ -147,8 +151,11 @@ class CatLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cat_id = db.Column(db.Integer, db.ForeignKey("cats.id"), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False, index=True)
+    shift_type = db.Column(db.String(2), nullable=True)  # AM | PM
     notes = db.Column(db.Text, nullable=True)
-    status = db.Column(db.String(50), nullable=True)  # current status mentioned in this log
+    bowel_movement = db.Column(db.String(100), nullable=True)  # pee only | poop only | pee and poop | none | other: ...
+    food_intake = db.Column(db.String(20), nullable=True)   # all | 3/4 | 1/2 | 1/4 | none
+    status = db.Column(db.String(50), nullable=True)
     volunteer_name = db.Column(db.String(100), nullable=True)
     email_message_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
