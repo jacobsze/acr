@@ -75,13 +75,6 @@
     </button>
   </div>
 </form>
-
-<form method="post" action="{{ url_for('admin.bootstrap_schedule') }}" style="display:inline;">
-  <button type="submit" class="btn btn-warning"
-          onclick="return confirm('This will fill in missing dates with assignments from the regular schedule. Existing assignments (whether from RegularSchedule or manual edits) will NOT be overwritten. Continue?')">
-    <i class="bi bi-lightning"></i> Bootstrap Schedule (fill gaps)
-  </button>
-</form>
 </div>
 
 {% else %}
