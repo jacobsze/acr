@@ -422,6 +422,8 @@ def bootstrap_schedule():
 @admin_bp.route("/regular")
 @login_required
 def regular_schedule():
+    from datetime import date as _date, timedelta
+
     volunteers = (
         User.query
         .filter(User.active.is_(True))
@@ -443,6 +445,19 @@ def regular_schedule():
     for key in regular_by_slot:
         regular_by_slot[key].sort(key=lambda u: u.name)
 
+    # Calculate the next occurrence of each day_of_week for date display
+    today = _date.today()
+    next_dates = {}  # day_of_week -> [date for week 0, date for week 1]
+    for dow in range(7):
+        # Find the next occurrence of this day of week
+        days_ahead = (dow - today.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7  # If today is that day, get next week
+        next_occurrence = today + timedelta(days=days_ahead)
+        week0_date = next_occurrence
+        week1_date = next_occurrence + timedelta(weeks=1)
+        next_dates[dow] = (week0_date, week1_date)
+
     return render_template(
         "admin_regular.html",
         volunteers=volunteers,
@@ -450,6 +465,7 @@ def regular_schedule():
         days_display=DAYS_DISPLAY,
         cap=cap,
         is_admin=g.user.is_admin_or_owner(),
+        next_dates=next_dates,
     )
 
 

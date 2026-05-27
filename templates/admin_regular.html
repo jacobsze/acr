@@ -22,24 +22,24 @@
 </div>
 
 {% if is_admin %}
-<div style="max-width:900px; margin:0 auto;">
+<div style="max-width:1400px; margin:0 auto;">
 <form method="post" action="{{ url_for('admin.save_regular_schedule') }}">
   <div class="table-responsive mb-3">
     <table class="table table-bordered align-middle regular-sched-table">
       <thead>
         <tr>
-          <th class="regular-day-col" style="width:30px;"></th>
+          <th class="regular-day-col" style="width:50px;"></th>
           <th colspan="{{ cap * 2 }}" class="text-center sched-am-hdr fw-bold">AM Shift</th>
           <th colspan="{{ cap * 2 }}" class="text-center sched-pm-hdr fw-bold">PM Shift</th>
         </tr>
         <tr>
-          <th class="regular-day-col" style="width:30px;"></th>
+          <th class="regular-day-col" style="width:50px;"></th>
           {% for shift_type in ['AM', 'PM'] %}
             {% for slot_idx in range(cap) %}
-              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.75rem;">
+              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.75rem; min-width:160px;">
                 Volunteer
               </th>
-              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.75rem;">
+              <th class="text-center {% if shift_type == 'AM' %}sched-am-hdr{% else %}sched-pm-hdr{% endif %} fw-semibold" style="font-size:.75rem; min-width:140px;">
                 Schedule
               </th>
             {% endfor %}
@@ -48,6 +48,7 @@
       </thead>
       <tbody>
         {% for dow, day_name in days_display %}
+        {% set dates = next_dates.get(dow, (none, none)) %}
         <tr>
           <td class="regular-day-col"><span class="regular-dow-label">{{ day_name }}</span></td>
           {% for shift_type in ['AM', 'PM'] %}
@@ -68,13 +69,13 @@
               <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}" style="padding:0.3rem;">
                 <select name="freq_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
                         class="regular-freq-select form-select form-select-sm">
-                  <option value="weekly" selected>Weekly</option>
-                  <option value="every_other_week">Alt weeks</option>
+                  <option value="weekly" selected>Every week</option>
+                  <option value="every_other_week">Every other</option>
                 </select>
                 <select name="week_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
                         class="regular-week-select form-select form-select-sm mt-1" style="display:none;">
-                  <option value="0">Start week 0</option>
-                  <option value="1">Start week 1</option>
+                  <option value="0">Start {{ dates[0].strftime('%-m/%-d') if dates[0] else '?' }}</option>
+                  <option value="1">Start {{ dates[1].strftime('%-m/%-d') if dates[1] else '?' }}</option>
                 </select>
               </td>
             {% endfor %}
