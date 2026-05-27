@@ -5,6 +5,33 @@ from datetime import date, timedelta
 logger = logging.getLogger(__name__)
 
 
+def should_schedule_on_week(target_date: date, bootstrap_date: date, frequency: str, start_week: int = 0) -> bool:
+    """
+    Determine if a volunteer should be scheduled on a given date based on frequency.
+
+    Args:
+        target_date: the date to check
+        bootstrap_date: the reference date when schedules started
+        frequency: 'weekly' or 'every_other_week'
+        start_week: for every_other_week, which week to start (0 = first, 1 = second)
+
+    Returns:
+        True if the volunteer should be scheduled on this date
+    """
+    if frequency == "weekly":
+        return True
+
+    if frequency == "every_other_week":
+        # Calculate which week (0, 1, 2, ...) this date falls into
+        weeks_since_bootstrap = (target_date - bootstrap_date).days // 7
+        week_parity = weeks_since_bootstrap % 2
+        # If start_week is 0, they work on even-numbered weeks (0, 2, 4...)
+        # If start_week is 1, they work on odd-numbered weeks (1, 3, 5...)
+        return week_parity == start_week
+
+    return False
+
+
 def extend_52week_schedule(app):
     """
     Generate the next week of ShiftAssignments to maintain ~52 weeks of future schedule.
@@ -73,6 +100,10 @@ def extend_52week_schedule(app):
                 )
 
                 for rs in reg_entries:
+                    # Check if this date should be scheduled based on frequency
+                    if not should_schedule_on_week(target_date, today, rs.frequency, rs.start_week or 0):
+                        continue
+
                     db.session.add(ShiftAssignment(
                         date=target_date,
                         shift_type=shift_type,

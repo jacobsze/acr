@@ -349,6 +349,7 @@ def bootstrap_schedule():
     Never overwrites existing ShiftAssignments (whether from RegularSchedule or manual edits).
     """
     from datetime import timedelta
+    from services.schedule_cron import should_schedule_on_week
 
     try:
         today = date.today()
@@ -388,6 +389,10 @@ def bootstrap_schedule():
                         .all()
                     )
                     for rs in reg_entries:
+                        # Check if this date should be scheduled based on frequency
+                        if not should_schedule_on_week(target_date, today, rs.frequency, rs.start_week or 0):
+                            continue
+
                         db.session.add(ShiftAssignment(
                             date=target_date,
                             shift_type=shift_type,

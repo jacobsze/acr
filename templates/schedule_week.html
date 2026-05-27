@@ -233,16 +233,24 @@ function rebuildFromSelects() {
   pendingAdds = [];
   pendingRemoves = [];
   document.querySelectorAll('.slot-select').forEach(sel => {
-    const origId   = sel.dataset.originalId   || '';
+    // Ensure consistent string types for comparison
+    const origId   = String(sel.dataset.originalId || '');
     const origName = sel.dataset.originalName || '';
-    const newId    = sel.value;
+    const newId    = String(sel.value || '');
     const date     = sel.dataset.date;
     const st       = sel.dataset.shiftType;
-    if (origId === newId) return;
-    if (origId) pendingRemoves.push({date, shift_type: st, user_id: origId,  name: origName});
-    if (newId)  {
-      const opt  = sel.querySelector(`option[value="${newId}"]`);
-      pendingAdds.push({date, shift_type: st, user_id: newId, name: opt ? opt.textContent.trim() : newId});
+
+    if (origId === newId) return;  // No change
+
+    // Always remove if there was an original assignment
+    if (origId) {
+      pendingRemoves.push({date, shift_type: st, user_id: parseInt(origId), name: origName});
+    }
+
+    // Always add if there's a new selection
+    if (newId) {
+      const opt = sel.querySelector(`option[value="${newId}"]`);
+      pendingAdds.push({date, shift_type: st, user_id: parseInt(newId), name: opt ? opt.textContent.trim() : newId});
     }
   });
   updateSaveBar();
