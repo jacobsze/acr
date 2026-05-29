@@ -551,6 +551,7 @@ def save_regular_schedule():
             )
 
     new_entries = []
+    updated_entries = []
     for key in new_set:
         if key not in current:
             # Addition: update RegularSchedule and immediately generate assignments
@@ -570,11 +571,39 @@ def save_regular_schedule():
                 changed_by_id=g.user.id,
             ))
             new_entries.append((user_id, dow, shift_type, freq, start_dt))
+        else:
+            # Update: check if frequency or start_date changed
+            user_id, dow, shift_type = key
+            rs = current[key]
+            freq, start_dt = freq_by_entry.get(key, ("weekly", None))
+            if rs.frequency != freq or rs.start_date != start_dt:
+                rs.frequency = freq
+                rs.start_date = start_dt
+                updated_entries.append((user_id, dow, shift_type, freq, start_dt))
 
     db.session.commit()
 
     # Immediately generate assignments for newly added volunteers
     for user_id, dow, shift_type, freq, start_dt in new_entries:
+        handle_regular_schedule_change(
+            current_app._get_current_object(),
+            action="add",
+            user_id=user_id,
+            day_of_week=dow,
+            shift_type=shift_type,
+            frequency=freq,
+            start_date=start_dt,
+        )
+
+    # For updated entries, remove old assignments and generate new ones
+    for user_id, dow, shift_type, freq, start_dt in updated_entries:
+        handle_regular_schedule_change(
+            current_app._get_current_object(),
+            action="remove",
+            user_id=user_id,
+            day_of_week=dow,
+            shift_type=shift_type,
+        )
         handle_regular_schedule_change(
             current_app._get_current_object(),
             action="add",
