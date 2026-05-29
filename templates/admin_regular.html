@@ -88,7 +88,7 @@
                         class="regular-slot-select form-select form-select-sm">
                   <option value=""></option>
                   {% for v in volunteers %}
-                    <option value="{{ v.id }}" {% if av and v.id == av.id %}selected{% endif %}>
+                    <option value="{{ v.id }}" {% if av and v.id == av.user.id %}selected{% endif %}>
                       {{ v.name }}
                     </option>
                   {% endfor %}
@@ -97,13 +97,18 @@
               <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %} {% if slot_idx == 2 %}slot-2-col{% endif %}" style="padding:0.3rem;">
                 <select name="freq_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
                         class="regular-freq-select form-select form-select-sm">
-                  <option value="weekly" selected>Every week</option>
-                  <option value="every_other_week">Every other</option>
+                  <option value="weekly" {% if av and av.frequency == 'weekly' %}selected{% endif %}>Every week</option>
+                  <option value="every_other_week" {% if av and av.frequency == 'every_other_week' %}selected{% endif %}>Every other</option>
                 </select>
+                {% set week_selection = 0 %}
+                {% if av and av.frequency == 'every_other_week' and av.start_date %}
+                  {% set week_diff = (av.start_date - dates[0]).days // 7 %}
+                  {% set week_selection = week_diff % 2 %}
+                {% endif %}
                 <select name="week_{{ dow }}_{{ shift_type }}_{{ slot_idx }}"
                         class="regular-week-select form-select form-select-sm mt-1" style="display:none;">
-                  <option value="0">Start {{ dates[0].strftime('%-m/%-d') if dates[0] else '?' }}</option>
-                  <option value="1">Start {{ dates[1].strftime('%-m/%-d') if dates[1] else '?' }}</option>
+                  <option value="0" {% if week_selection == 0 %}selected{% endif %}>Start {{ dates[0].strftime('%-m/%-d') if dates[0] else '?' }}</option>
+                  <option value="1" {% if week_selection == 1 %}selected{% endif %}>Start {{ dates[1].strftime('%-m/%-d') if dates[1] else '?' }}</option>
                 </select>
               </td>
             {% endfor %}
