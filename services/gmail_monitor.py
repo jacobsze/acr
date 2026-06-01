@@ -72,14 +72,6 @@ def _get_service(app):
                 with open(token_file, "w") as fh:
                     fh.write(creds.to_json())
         else:
-            # Check if we're in an interactive environment (has a display)
-            has_display = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY") or os.name == "nt"
-            if not has_display and not token_json_env:
-                raise RuntimeError(
-                    "No valid Gmail token found and cannot run interactive OAuth flow on headless server. "
-                    "Set GMAIL_TOKEN_JSON environment variable with a pre-authorized token or "
-                    "run the OAuth flow locally and set GMAIL_TOKEN_FILE to save the token."
-                )
             flow = InstalledAppFlow.from_client_config(creds_info, SCOPES)
             creds = flow.run_local_server(port=0)
             if token_file:
