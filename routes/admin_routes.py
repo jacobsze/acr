@@ -739,12 +739,16 @@ def email_log():
     from sqlalchemy import func
     NY = ZoneInfo("America/New_York")
 
-    logs = (
+    page = request.args.get("page", 1, type=int)
+    per_page = 25
+
+    logs_query = (
         EmailProcessingLog.query
         .order_by(func.coalesce(EmailProcessingLog.sent_at, EmailProcessingLog.processed_at).desc())
-        .limit(100)
-        .all()
     )
+
+    paginated = logs_query.paginate(page=page, per_page=per_page, error_out=False)
+    logs = paginated.items
 
     last_check = None
     setting = AppSetting.query.get("last_email_check")
@@ -765,7 +769,23 @@ def email_log():
         last_check=last_check,
         next_check=next_check,
         check_interval=current_app.config.get("GMAIL_CHECK_INTERVAL_MINUTES", 5),
+        pagination=paginated,
+        page=page,
     )
+
+
+@admin_bp.route("/email-log/resend-schedule", methods=["POST"])
+@owner_required
+def resend_weekly_schedule():
+    """Manually resend the weekly schedule email."""
+    from services.weekly_email import send_weekly_schedule_email
+    try:
+        result = send_weekly_schedule_email(current_app._get_current_object())
+        flash(f"Weekly schedule email sent to {result.get('recipient', 'unknown')}", "success")
+    except Exception as e:
+        current_app.logger.exception("Failed to resend weekly schedule email")
+        flash(f"Failed to send email: {str(e)}", "error")
+    return redirect(url_for("admin.email_log"))
 
 
 # ── AI Settings ───────────────────────────────────────────────────────────────
