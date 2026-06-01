@@ -38,11 +38,20 @@ def _get_service(app):
     creds_file = app.config["GMAIL_CREDENTIALS_FILE"]
     token_file = app.config.get("GMAIL_TOKEN_FILE", "")
 
-    if not os.path.exists(creds_file):
-        raise FileNotFoundError(
-            f"Gmail credentials file not found: {creds_file}. "
-            "Download it from Google Cloud Console."
-        )
+    # Try to load credentials from file or from JSON string
+    creds_info = None
+    if os.path.exists(creds_file):
+        with open(creds_file) as f:
+            creds_info = _json.load(f)
+    else:
+        # Try parsing as JSON string (for Render environment variables)
+        try:
+            creds_info = _json.loads(creds_file)
+        except (ValueError, TypeError):
+            raise FileNotFoundError(
+                f"Gmail credentials file not found: {creds_file}. "
+                "Download it from Google Cloud Console or set GMAIL_CREDENTIALS_FILE to the JSON content."
+            )
 
     creds = None
 
@@ -63,7 +72,7 @@ def _get_service(app):
                 with open(token_file, "w") as fh:
                     fh.write(creds.to_json())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(creds_file, SCOPES)
+            flow = InstalledAppFlow.from_client_config(creds_info, SCOPES)
             creds = flow.run_local_server(port=0)
             if token_file:
                 with open(token_file, "w") as fh:
