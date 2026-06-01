@@ -32,7 +32,6 @@ def _get_service(app):
     import json as _json
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
-    from google.oauth2 import service_account
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
 
@@ -54,13 +53,6 @@ def _get_service(app):
                 "Download it from Google Cloud Console or set GMAIL_CREDENTIALS_FILE to the JSON content."
             )
 
-    # Check if this is a service account or OAuth2 credentials
-    if creds_info.get("type") == "service_account":
-        # Service account authentication - use directly
-        creds = service_account.Credentials.from_service_account_info(creds_info, scopes=SCOPES)
-        return build("gmail", "v1", credentials=creds)
-
-    # OAuth2 credentials handling
     creds = None
 
     # Prefer GMAIL_TOKEN_JSON env var (survives Render deploys) over token file
