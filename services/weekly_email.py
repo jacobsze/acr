@@ -67,17 +67,26 @@ def _build_table(all_weeks, highlight_date=None, highlight_shifts=None):
 
 
 def _send_gmail(app, recipient, subject, html_body):
-    from services.gmail_monitor import _get_service
-    service = _get_service(app)
-    monitor_email = app.config.get("GMAIL_MONITOR_EMAIL", "")
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    smtp_user = app.config.get("GMAIL_SMTP_USER", "")
+    smtp_password = app.config.get("GMAIL_SMTP_PASSWORD", "")
+
+    if not smtp_user or not smtp_password:
+        raise ValueError("GMAIL_SMTP_USER and GMAIL_SMTP_PASSWORD not configured")
+
     msg = MIMEMultipart("alternative")
     msg["to"] = recipient
-    msg["from"] = monitor_email
+    msg["from"] = smtp_user
     msg["subject"] = subject
     msg.attach(MIMEText(html_body, "html"))
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
     try:
-        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
         app.logger.info("Email sent successfully to %s: %s", recipient, subject)
     except Exception as e:
         app.logger.error("Failed to send email to %s: %s", recipient, str(e), exc_info=True)
