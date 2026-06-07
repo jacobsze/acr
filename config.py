@@ -46,6 +46,12 @@ class Config:
     GMAIL_MONITOR_EMAIL = os.environ.get("GMAIL_MONITOR_EMAIL", "acr86.schedule@gmail.com")
     GMAIL_CHECK_INTERVAL_MINUTES = int(os.environ.get("GMAIL_CHECK_INTERVAL_MINUTES", "5"))
 
+    # Gmail SMTP/IMAP (for sending and receiving emails)
+    GMAIL_SMTP_USER = os.environ.get("GMAIL_SMTP_USER", "")
+    GMAIL_SMTP_PASSWORD = os.environ.get("GMAIL_SMTP_PASSWORD", "")
+    GMAIL_IMAP_USER = os.environ.get("GMAIL_IMAP_USER", "")
+    GMAIL_IMAP_PASSWORD = os.environ.get("GMAIL_IMAP_PASSWORD", "")
+
     # Business rules
     MAX_VOLUNTEERS_PER_SHIFT = 3
 
