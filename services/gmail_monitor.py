@@ -2,32 +2,56 @@
 Monitor the configured Gmail inbox for messages from / to the Google Group
 and apply schedule changes extracted by the LLM parser.
 
-Setup:
-1. Create a Google Cloud project and enable the Gmail API.
-2. Create OAuth 2.0 credentials (Desktop app) and download credentials.json.
-3. Set GMAIL_CREDENTIALS_FILE and GMAIL_TOKEN_FILE in .env.
-4. On first run, a browser window will open to authorise access and write token.json.
-
-Note: SCOPES now includes gmail.send so the app can email the owner with results.
-If you previously authorised with the read-only scope, delete token.json and
-re-run the local OAuth flow to get a new token with the updated scopes.
+Uses IMAP for receiving emails and SMTP for sending.
 """
 import base64
 import json
 import os
 from datetime import date
 from email.mime.text import MIMEText
+import imaplib
+import email
 
 from flask import current_app
 
 
-SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
-]
+def _get_imap_connection(app):
+    """Connect to Gmail via IMAP."""
+    imap_user = app.config.get("GMAIL_IMAP_USER", "")
+    imap_password = app.config.get("GMAIL_IMAP_PASSWORD", "")
+
+    if not imap_user or not imap_password:
+        raise ValueError("GMAIL_IMAP_USER and GMAIL_IMAP_PASSWORD not configured")
+
+    imap = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+    imap.login(imap_user, imap_password)
+    imap.select("INBOX")
+    return imap
 
 
-def _get_service(app):
+def _imap_message_to_dict(msg_bytes):
+    """Convert IMAP email bytes to a dict with extracted content."""
+    msg = email.message_from_bytes(msg_bytes)
+    msg_id = msg.get("Message-ID", "")
+
+    headers = {h: msg.get(h, "") for h in ["From", "Subject"]}
+    body = ""
+
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain":
+                body = part.get_payload(decode=True).decode("utf-8", errors="replace")
+                break
+    else:
+        body = msg.get_payload(decode=True).decode("utf-8", errors="replace")
+
+    return {
+        "id": msg_id,
+        "From": headers.get("From", ""),
+        "Subject": headers.get("Subject", ""),
+        "body": body,
+        "Message-ID": msg_id,
+    }
     """Return an authenticated Gmail API service object."""
     import json as _json
     from google.auth.transport.requests import Request
@@ -573,10 +597,85 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
     return status, error_msg, parsed, content
 
 
+def _process_one_imap(app, msg_dict, volunteers, ignore_registration=False):
+    """
+    Parse and apply a single email from IMAP.
+    Returns (status, error_msg, parsed, content).
+    """
+    from services.llm_parser import parse_email_schedule_request
+
+    volunteer_emails = {v.email.lower() for v in volunteers}
+    upcoming_schedules = _build_upcoming_schedules(volunteers)
+    status = "no_action"
+    error_msg = None
+    parsed = {}
+
+    content = _extract_content_imap(msg_dict)
+    is_volunteer = False
+
+    try:
+        from_email = content["from_email"].lower()
+
+        if not ignore_registration and from_email not in volunteer_emails:
+            status = "no_action"
+        else:
+            is_volunteer = True
+            parsed = parse_email_schedule_request(
+                email_subject=content["subject"],
+                email_body=content["body"],
+                email_from=content["from_email"],
+                volunteers=volunteers,
+                upcoming_schedules=upcoming_schedules,
+            )
+            if parsed.get("date_range") and not parsed.get("date"):
+                resolved = _resolve_date_range(parsed, upcoming_schedules)
+                if resolved:
+                    parsed["date"] = resolved
+
+            if parsed.get("error") and parsed.get("action") == "unknown":
+                status = "failed"
+                error_msg = parsed.get("error")
+            else:
+                results = _apply_parsed(app, parsed, content, sender_email=content["from_email"],
+                                        ignore_registration=ignore_registration)
+                status = "success" if any(r["status"] == "success" for r in results) else "no_action"
+
+    except Exception as exc:
+        from models import db as _db
+        _db.session.rollback()
+        app.logger.error("Gmail monitor: error processing IMAP message – %s", exc)
+        status = "failed"
+        error_msg = str(exc)
+
+    return status, error_msg, parsed, content
+
+
+def _extract_content_imap(msg_dict):
+    """Extract content from IMAP email dict."""
+    from datetime import datetime
+
+    from_email = msg_dict.get("From", "").lower()
+    if "<" in from_email and ">" in from_email:
+        from_email = from_email.split("<")[1].split(">")[0].strip()
+    else:
+        from_email = from_email.strip()
+
+    body = msg_dict.get("body", "")
+    sent_at = None  # IMAP doesn't easily provide sent_at, so we skip it
+
+    return {
+        "subject": msg_dict.get("Subject", ""),
+        "from_email": from_email,
+        "body": body,
+        "message_id": msg_dict.get("Message-ID", ""),
+        "sent_at": sent_at,
+    }
+
+
 def check_and_process(app) -> None:
     """
-    Poll for new group emails, parse them with Claude, and apply any
-    schedule changes.  Designed to be called from a background scheduler.
+    Poll for new emails via IMAP, parse them with Claude, and apply any
+    schedule changes. Designed to be called from a background scheduler.
     """
     from datetime import datetime
     from models import db, User, EmailProcessingLog, AppSetting
@@ -588,31 +687,44 @@ def check_and_process(app) -> None:
         else:
             db.session.add(AppSetting(key="last_email_check", value=datetime.utcnow().isoformat()))
         db.session.commit()
+
         try:
-            service = _get_service(app)
+            imap = _get_imap_connection(app)
         except Exception as exc:
-            app.logger.error("Gmail monitor: cannot get service – %s", exc)
+            app.logger.error("Gmail monitor: cannot connect to IMAP – %s", exc)
             return
 
         try:
-            result = (
-                service.users()
-                .messages()
-                .list(userId="me", q="in:inbox", maxResults=50)
-                .execute()
-            )
+            status, message_uids = imap.search(None, "ALL")
+            if status != "OK":
+                imap.close()
+                return
+            msg_uids = message_uids[0].split()
         except Exception as exc:
-            app.logger.error("Gmail monitor: list() failed – %s", exc)
+            app.logger.error("Gmail monitor: IMAP search failed – %s", exc)
+            imap.close()
             return
 
         volunteers = User.query.filter_by(active=True).all()
+        processed_ids = {log.gmail_message_id for log in EmailProcessingLog.query.all()}
 
-        for meta in result.get("messages", []):
-            msg_id = meta["id"]
-            if EmailProcessingLog.query.filter_by(gmail_message_id=msg_id).first():
+        for uid in msg_uids:
+            try:
+                status, msg_data = imap.fetch(uid, "(RFC822)")
+                if status != "OK":
+                    continue
+
+                msg_bytes = msg_data[0][1]
+                msg_dict = _imap_message_to_dict(msg_bytes)
+                msg_id = msg_dict["id"]
+
+                if msg_id in processed_ids:
+                    continue
+
+                status, error_msg, parsed, content = _process_one_imap(app, msg_dict, volunteers)
+            except Exception as exc:
+                app.logger.error("Gmail monitor: error processing message – %s", exc)
                 continue
-
-            status, error_msg, parsed, content = _process_one(app, service, msg_id, volunteers)
 
             db.session.add(EmailProcessingLog(
                 gmail_message_id=msg_id,
