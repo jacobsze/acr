@@ -8,8 +8,13 @@
 {% if is_admin_mode %}
 <div class="d-flex justify-content-end align-items-center gap-2 mt-3 mb-1 mx-auto sched-mobile-full flex-wrap" style="max-width:600px;">
   <form method="post" action="{{ url_for('admin.send_weekly_email') }}"
-        onsubmit="return confirm('Send weekly schedule email now?')">
-    <button type="submit" class="btn btn-outline-primary btn-sm">
+        onsubmit="return confirm('Send weekly schedule email now?')"
+        class="d-flex align-items-center gap-1">
+    <select name="recipient" class="form-select form-select-sm" style="width:auto;">
+      <option value="">Group (acrpetco86@googlegroups.com)</option>
+      <option value="jacob.sze@gmail.com">jacob.sze@gmail.com (test)</option>
+    </select>
+    <button type="submit" class="btn btn-outline-primary btn-sm text-nowrap">
       <i class="bi bi-envelope"></i> Send weekly email
     </button>
   </form>
@@ -190,7 +195,7 @@
   </div>
 </div>
 
-{# ── Hidden form (submitted on confirm) ──────────────────────────────────── #}
+{# ── Hidden form (submitted on confirm) ──────────────────────────────── #}
 <form id="save-form" method="post" action="{{ url_for('schedule.bulk_save') }}">
   <input type="hidden" id="changes-input" name="changes_json" value="{}">
   <input type="hidden" name="week_start" value="{{ week_start.isoformat() }}">
