@@ -95,13 +95,13 @@ def _send_gmail(app, recipient, subject, html_body):
 
 # ── Weekly schedule email ─────────────────────────────────────────────────────
 
-def send_weekly_schedule_email(app):
+def send_weekly_schedule_email(app, recipient=None):
     """Build and send the 3-week schedule email. Safe to call from background threads."""
     with app.app_context():
-        return _send_weekly_schedule_email(app)
+        return _send_weekly_schedule_email(app, recipient=recipient)
 
 
-def _send_weekly_schedule_email(app):
+def _send_weekly_schedule_email(app, recipient=None):
     from routes.schedule_routes import get_week_start, get_week_dates, build_schedule
     from zoneinfo import ZoneInfo
     from datetime import datetime
@@ -143,9 +143,10 @@ def _send_weekly_schedule_email(app):
 {table_html}
 </body></html>"""
 
-    _send_gmail(app, WEEKLY_EMAIL_RECIPIENT, subject, html_body)
+    target_recipient = recipient or WEEKLY_EMAIL_RECIPIENT
+    _send_gmail(app, target_recipient, subject, html_body)
     app.logger.info("Weekly schedule email sent – %s", subject)
-    return {"recipient": WEEKLY_EMAIL_RECIPIENT, "subject": subject}
+    return {"recipient": target_recipient, "subject": subject}
 
 
 # ── Daily open-shift alert ────────────────────────────────────────────────────
