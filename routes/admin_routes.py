@@ -677,7 +677,8 @@ def change_log():
 def send_weekly_email():
     try:
         from services.weekly_email import send_weekly_schedule_email
-        result = send_weekly_schedule_email(current_app._get_current_object())
+        recipient = request.form.get("recipient")
+        result = send_weekly_schedule_email(current_app._get_current_object(), recipient=recipient)
         flash(f"Weekly schedule email sent to {result['recipient']}.", "success")
     except Exception as exc:
         flash(f"Failed to send weekly email: {exc}", "error")
