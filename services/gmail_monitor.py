@@ -52,57 +52,6 @@ def _imap_message_to_dict(msg_bytes):
         "body": body,
         "Message-ID": msg_id,
     }
-    """Return an authenticated Gmail API service object."""
-    import json as _json
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build
-
-    creds_file = app.config["GMAIL_CREDENTIALS_FILE"]
-    token_file = app.config.get("GMAIL_TOKEN_FILE", "")
-
-    # Try to load credentials from file or from JSON string
-    creds_info = None
-    if os.path.exists(creds_file):
-        with open(creds_file) as f:
-            creds_info = _json.load(f)
-    else:
-        # Try parsing as JSON string (for Render environment variables)
-        try:
-            creds_info = _json.loads(creds_file)
-        except (ValueError, TypeError):
-            raise FileNotFoundError(
-                f"Gmail credentials file not found: {creds_file}. "
-                "Download it from Google Cloud Console or set GMAIL_CREDENTIALS_FILE to the JSON content."
-            )
-
-    creds = None
-
-    # Prefer GMAIL_TOKEN_JSON env var (survives Render deploys) over token file
-    token_json_env = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
-    if token_json_env:
-        creds = Credentials.from_authorized_user_info(
-            _json.loads(token_json_env), SCOPES
-        )
-    elif token_file and os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            # Persist refreshed token back to file if available
-            if token_file:
-                with open(token_file, "w") as fh:
-                    fh.write(creds.to_json())
-        else:
-            flow = InstalledAppFlow.from_client_config(creds_info, SCOPES)
-            creds = flow.run_local_server(port=0)
-            if token_file:
-                with open(token_file, "w") as fh:
-                    fh.write(creds.to_json())
-
-    return build("gmail", "v1", credentials=creds)
 
 
 def _extract_content(msg: dict) -> dict:
@@ -315,13 +264,17 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
     return results
 
 
-def _send_summary_email(app, service, content, parsed, results, processing_error=None):
-    """Reply to the original email thread with a processing summary for the owner.
-    Also sends to volunteer group if there were successful schedule changes."""
+def _send_summary_email(app, content, parsed, results=None, processing_error=None):
+    """Send a processing summary email via SMTP."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
     owner_email = app.config.get("OWNER_EMAIL", "")
     monitor_email = app.config.get("GMAIL_MONITOR_EMAIL", "")
     group_email = "acrpetco86@googlegroups.com"
-    if not owner_email:
+
+    if not owner_email or not monitor_email:
         return
 
     status_icons = {
@@ -335,6 +288,8 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
     }
     lines = []
     any_success = False
+    results = results or []
+
     if processing_error:
         lines.append(f"⚠️ Error during processing — please handle manually:")
         lines.append(f"   {processing_error}")
@@ -361,7 +316,7 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
     original_subject = content.get("subject", "")
     reply_subject = original_subject if original_subject.lower().startswith("re:") else f"Re: {original_subject}"
 
-    msg = MIMEText(body)
+    msg = MIMEMultipart("alternative")
     # Send to both owner and group if successful changes, else just owner
     if any_success:
         msg["to"] = f"{owner_email}, {group_email}"
@@ -369,20 +324,20 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
         msg["to"] = owner_email
     msg["from"] = monitor_email
     msg["subject"] = reply_subject
+    msg.attach(MIMEText(body, "plain"))
 
-    original_message_id = content.get("message_id", "")
-    if original_message_id:
-        msg["In-Reply-To"] = original_message_id
-        msg["References"] = original_message_id
+    smtp_user = app.config.get("GMAIL_SMTP_USER", "")
+    smtp_password = app.config.get("GMAIL_SMTP_PASSWORD", "")
 
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-    send_body = {"raw": raw}
-    thread_id = content.get("thread_id", "")
-    if thread_id:
-        send_body["threadId"] = thread_id
+    if not smtp_user or not smtp_password:
+        app.logger.error("Gmail monitor: SMTP credentials not configured for summary email")
+        return
 
     try:
-        service.users().messages().send(userId="me", body=send_body).execute()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+        app.logger.info("Summary email sent to %s", msg["to"])
     except Exception as exc:
         app.logger.error("Gmail monitor: failed to send summary email – %s", exc)
 
@@ -491,116 +446,32 @@ def _resolve_date_range(parsed, upcoming_schedules):
     return matching or None
 
 
-def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
-    """
-    Fetch, parse, and apply a single Gmail message.
-    Returns (status, error_msg, parsed, content).
-    """
-    from services.llm_parser import parse_email_schedule_request
+def _extract_content_imap(msg_dict):
+    """Extract content from IMAP email dict."""
+    from datetime import datetime
 
-    volunteer_emails = {v.email.lower() for v in volunteers}
-    upcoming_schedules = _build_upcoming_schedules(volunteers)
-    status = "no_action"
-    error_msg = None
-    parsed = {}
-    content = {"subject": "", "from_email": "", "body": ""}
-    is_volunteer = False
+    from_email = msg_dict.get("From", "").lower()
+    if "<" in from_email and ">" in from_email:
+        from_email = from_email.split("<")[1].split(">")[0].strip()
+    else:
+        from_email = from_email.strip()
 
-    try:
-        msg = (
-            service.users()
-            .messages()
-            .get(userId="me", id=msg_id, format="full")
-            .execute()
-        )
-        content = _extract_content(msg)
+    body = msg_dict.get("body", "")
+    sent_at = None  # IMAP doesn't easily provide sent_at, so we skip it
 
-        sender = content["from_email"].lower()
-
-        # If email is from Google Group and we extracted a sender_name, try to match by name
-        if content.get("sender_name") and "googlegroups.com" in sender:
-            # Try to find volunteer by name
-            sender_name_lower = content["sender_name"].lower()
-            for vol in volunteers:
-                if vol["name"].lower() == sender_name_lower:
-                    sender = vol["email"].lower()
-                    break
-
-        if sender not in volunteer_emails and not ignore_registration:
-            app.logger.info(
-                "Gmail monitor: sender %s not a registered volunteer – running LLM for review only",
-                sender,
-            )
-            # Still parse with LLM so the owner is notified about schedule-related
-            # content (e.g. coverage requests) from group members not yet in the system.
-            parsed = parse_email_schedule_request(
-                email_subject=content["subject"],
-                email_body=content["body"],
-                email_from=content["from_email"],
-                volunteers=volunteers,
-                upcoming_schedules=upcoming_schedules,
-            )
-            if parsed.get("date_range") and not parsed.get("date"):
-                resolved = _resolve_date_range(parsed, upcoming_schedules)
-                if resolved:
-                    parsed["date"] = resolved
-            parsed["_not_registered"] = True
-            _send_summary_email(app, service, content, parsed, [{
-                "status": "not_registered",
-                "message": (
-                    f"⚠️ {content['from_email']} is not a registered volunteer — "
-                    "no changes were applied. Add them to the volunteer list if needed."
-                ),
-            }])
-        else:
-            is_volunteer = True
-            parsed = parse_email_schedule_request(
-                email_subject=content["subject"],
-                email_body=content["body"],
-                email_from=content["from_email"],
-                volunteers=volunteers,
-                upcoming_schedules=upcoming_schedules,
-            )
-            if parsed.get("date_range") and not parsed.get("date"):
-                resolved = _resolve_date_range(parsed, upcoming_schedules)
-                if resolved:
-                    parsed["date"] = resolved
-
-            if parsed.get("error") and parsed.get("action") == "unknown":
-                # LLM/API-level error — treat as failed
-                status = "failed"
-                error_msg = parsed.get("error")
-            else:
-                results = _apply_parsed(app, parsed, content, sender_email=content["from_email"],
-                                        ignore_registration=ignore_registration)
-                status = "success" if any(r["status"] == "success" for r in results) else "no_action"
-                # Reply when a change was made, Claude flagged low confidence,
-                # couldn't classify the email, or an action was attempted but failed
-                # (not_found, at_capacity) so the owner can handle it manually.
-                needs_owner_review = any(
-                    r["status"] in ("not_found", "at_capacity") for r in results
-                )
-                if (any(r["status"] in ("success", "low_confidence") for r in results)
-                        or needs_owner_review
-                        or parsed.get("action") == "unknown"):
-                    _send_summary_email(app, service, content, parsed, results)
-
-    except Exception as exc:
-        from models import db as _db
-        _db.session.rollback()  # Clear any aborted transaction so the log update can still commit
-        app.logger.error("Gmail monitor: error on msg %s – %s", msg_id, exc)
-        status = "failed"
-        error_msg = str(exc)
-        if is_volunteer:
-            _send_summary_email(app, service, content, parsed, [], processing_error=str(exc))
-
-    return status, error_msg, parsed, content
+    return {
+        "subject": msg_dict.get("Subject", ""),
+        "from_email": from_email,
+        "body": body,
+        "message_id": msg_dict.get("Message-ID", ""),
+        "sent_at": sent_at,
+    }
 
 
 def _process_one_imap(app, msg_dict, volunteers, ignore_registration=False):
     """
     Parse and apply a single email from IMAP.
-    Returns (status, error_msg, parsed, content).
+    Returns (status, error_msg, parsed, content, results).
     """
     from services.llm_parser import parse_email_schedule_request
 
@@ -609,6 +480,7 @@ def _process_one_imap(app, msg_dict, volunteers, ignore_registration=False):
     status = "no_action"
     error_msg = None
     parsed = {}
+    results = []
 
     content = _extract_content_imap(msg_dict)
     is_volunteer = False
@@ -647,29 +519,7 @@ def _process_one_imap(app, msg_dict, volunteers, ignore_registration=False):
         status = "failed"
         error_msg = str(exc)
 
-    return status, error_msg, parsed, content
-
-
-def _extract_content_imap(msg_dict):
-    """Extract content from IMAP email dict."""
-    from datetime import datetime
-
-    from_email = msg_dict.get("From", "").lower()
-    if "<" in from_email and ">" in from_email:
-        from_email = from_email.split("<")[1].split(">")[0].strip()
-    else:
-        from_email = from_email.strip()
-
-    body = msg_dict.get("body", "")
-    sent_at = None  # IMAP doesn't easily provide sent_at, so we skip it
-
-    return {
-        "subject": msg_dict.get("Subject", ""),
-        "from_email": from_email,
-        "body": body,
-        "message_id": msg_dict.get("Message-ID", ""),
-        "sent_at": sent_at,
-    }
+    return status, error_msg, parsed, content, results
 
 
 def check_and_process(app) -> None:
@@ -709,9 +559,15 @@ def check_and_process(app) -> None:
         processed_ids = {log.gmail_message_id for log in EmailProcessingLog.query.all()}
 
         for uid in msg_uids:
+            status = "no_action"
+            error_msg = None
+            parsed = {}
+            content = {}
+            results = []
+
             try:
-                status, msg_data = imap.fetch(uid, "(RFC822)")
-                if status != "OK":
+                status_code, msg_data = imap.fetch(uid, "(RFC822)")
+                if status_code != "OK":
                     continue
 
                 msg_bytes = msg_data[0][1]
@@ -721,7 +577,12 @@ def check_and_process(app) -> None:
                 if msg_id in processed_ids:
                     continue
 
-                status, error_msg, parsed, content = _process_one_imap(app, msg_dict, volunteers)
+                status, error_msg, parsed, content, results = _process_one_imap(app, msg_dict, volunteers)
+
+                # Send summary email to owner/group if from registered volunteer
+                if status != "no_action":
+                    _send_summary_email(app, content, parsed, results=results, processing_error=error_msg if status == "failed" else None)
+
             except Exception as exc:
                 app.logger.error("Gmail monitor: error processing message – %s", exc)
                 continue
@@ -737,43 +598,3 @@ def check_and_process(app) -> None:
                 sent_at=content.get("sent_at"),
             ))
             db.session.commit()
-
-
-def reprocess_message(app, log_id: int, ignore_registration: bool = False) -> None:
-    """Re-fetch and re-parse a previously logged email, updating the log entry in place.
-    Must be called from within an active app/request context (i.e. from a route)."""
-    from datetime import datetime
-    from models import db, User, EmailProcessingLog
-
-    log = db.session.get(EmailProcessingLog, log_id)
-    if log is None:
-        raise ValueError(f"EmailProcessingLog {log_id} not found")
-
-    try:
-        service = _get_service(app)
-    except Exception as exc:
-        log.status = "failed"
-        log.error_message = str(exc)
-        log.processed_at = datetime.utcnow()
-        db.session.commit()
-        return
-
-    volunteers = User.query.filter_by(active=True).all()
-    status, error_msg, parsed, content = _process_one(
-        app, service, log.gmail_message_id, volunteers,
-        ignore_registration=ignore_registration,
-    )
-
-    log.status = status
-    log.error_message = error_msg
-    log.parsed_action = json.dumps(parsed) if parsed else None
-    log.processed_at = datetime.utcnow()
-    if content.get("from_email"):
-        log.sender_email = content["from_email"]
-    if content.get("subject"):
-        log.subject = content["subject"]
-    if content.get("body"):
-        log.body_snippet = content["body"][:500]
-    if content.get("sent_at"):
-        log.sent_at = content["sent_at"]
-    db.session.commit()
