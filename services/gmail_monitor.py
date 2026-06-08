@@ -315,13 +315,17 @@ def _apply_parsed(app, parsed, content, sender_email=None, ignore_registration=F
     return results
 
 
-def _send_summary_email(app, service, content, parsed, results, processing_error=None):
-    """Reply to the original email thread with a processing summary for the owner.
-    Also sends to volunteer group if there were successful schedule changes."""
+def _send_summary_email(app, content, parsed, results=None, processing_error=None):
+    """Send a processing summary email via SMTP."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
     owner_email = app.config.get("OWNER_EMAIL", "")
     monitor_email = app.config.get("GMAIL_MONITOR_EMAIL", "")
     group_email = "acrpetco86@googlegroups.com"
-    if not owner_email:
+
+    if not owner_email or not monitor_email:
         return
 
     status_icons = {
@@ -335,6 +339,8 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
     }
     lines = []
     any_success = False
+    results = results or []
+
     if processing_error:
         lines.append(f"⚠️ Error during processing — please handle manually:")
         lines.append(f"   {processing_error}")
@@ -361,7 +367,7 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
     original_subject = content.get("subject", "")
     reply_subject = original_subject if original_subject.lower().startswith("re:") else f"Re: {original_subject}"
 
-    msg = MIMEText(body)
+    msg = MIMEMultipart("alternative")
     # Send to both owner and group if successful changes, else just owner
     if any_success:
         msg["to"] = f"{owner_email}, {group_email}"
@@ -369,20 +375,20 @@ def _send_summary_email(app, service, content, parsed, results, processing_error
         msg["to"] = owner_email
     msg["from"] = monitor_email
     msg["subject"] = reply_subject
+    msg.attach(MIMEText(body, "plain"))
 
-    original_message_id = content.get("message_id", "")
-    if original_message_id:
-        msg["In-Reply-To"] = original_message_id
-        msg["References"] = original_message_id
+    smtp_user = app.config.get("GMAIL_SMTP_USER", "")
+    smtp_password = app.config.get("GMAIL_SMTP_PASSWORD", "")
 
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-    send_body = {"raw": raw}
-    thread_id = content.get("thread_id", "")
-    if thread_id:
-        send_body["threadId"] = thread_id
+    if not smtp_user or not smtp_password:
+        app.logger.error("Gmail monitor: SMTP credentials not configured for summary email")
+        return
 
     try:
-        service.users().messages().send(userId="me", body=send_body).execute()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+        app.logger.info("Summary email sent to %s", msg["to"])
     except Exception as exc:
         app.logger.error("Gmail monitor: failed to send summary email – %s", exc)
 
@@ -600,7 +606,7 @@ def _process_one(app, service, msg_id, volunteers, ignore_registration=False):
 def _process_one_imap(app, msg_dict, volunteers, ignore_registration=False):
     """
     Parse and apply a single email from IMAP.
-    Returns (status, error_msg, parsed, content).
+    Returns (status, error_msg, parsed, content, results).
     """
     from services.llm_parser import parse_email_schedule_request
 
@@ -609,6 +615,7 @@ def _process_one_imap(app, msg_dict, volunteers, ignore_registration=False):
     status = "no_action"
     error_msg = None
     parsed = {}
+    results = []
 
     content = _extract_content_imap(msg_dict)
     is_volunteer = False
@@ -647,7 +654,7 @@ def _process_one_imap(app, msg_dict, volunteers, ignore_registration=False):
         status = "failed"
         error_msg = str(exc)
 
-    return status, error_msg, parsed, content
+    return status, error_msg, parsed, content, results
 
 
 def _extract_content_imap(msg_dict):
@@ -709,9 +716,15 @@ def check_and_process(app) -> None:
         processed_ids = {log.gmail_message_id for log in EmailProcessingLog.query.all()}
 
         for uid in msg_uids:
+            status = "no_action"
+            error_msg = None
+            parsed = {}
+            content = {}
+            results = []
+
             try:
-                status, msg_data = imap.fetch(uid, "(RFC822)")
-                if status != "OK":
+                status_code, msg_data = imap.fetch(uid, "(RFC822)")
+                if status_code != "OK":
                     continue
 
                 msg_bytes = msg_data[0][1]
@@ -721,7 +734,12 @@ def check_and_process(app) -> None:
                 if msg_id in processed_ids:
                     continue
 
-                status, error_msg, parsed, content = _process_one_imap(app, msg_dict, volunteers)
+                status, error_msg, parsed, content, results = _process_one_imap(app, msg_dict, volunteers)
+
+                # Send summary email to owner/group if from registered volunteer
+                if status != "no_action":
+                    _send_summary_email(app, content, parsed, results=results, processing_error=error_msg if status == "failed" else None)
+
             except Exception as exc:
                 app.logger.error("Gmail monitor: error processing message – %s", exc)
                 continue
