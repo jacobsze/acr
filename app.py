@@ -115,11 +115,12 @@ def create_app(config_class=Config) -> Flask:
 
 def _wire_gmail_check(app: Flask) -> None:
     """Register a before_request hook that triggers Gmail polling when overdue."""
-    creds_file = app.config.get("GMAIL_CREDENTIALS_FILE", "")
-    if not creds_file or not os.path.exists(creds_file):
+    imap_user = app.config.get("GMAIL_IMAP_USER", "")
+    imap_password = app.config.get("GMAIL_IMAP_PASSWORD", "")
+    if not imap_user or not imap_password:
         app.logger.info(
-            "Gmail credentials not found – email monitor disabled. "
-            "Set GMAIL_CREDENTIALS_FILE in .env to enable."
+            "Gmail IMAP credentials not configured – email monitor disabled. "
+            "Set GMAIL_IMAP_USER and GMAIL_IMAP_PASSWORD to enable."
         )
         return
 
@@ -162,8 +163,9 @@ def _wire_gmail_check(app: Flask) -> None:
 
 def _start_open_shift_cron(app: Flask) -> None:
     """Start APScheduler CronTrigger for the daily 10 am open-shift alert."""
-    creds_file = app.config.get("GMAIL_CREDENTIALS_FILE", "")
-    if not creds_file or not os.path.exists(creds_file):
+    imap_user = app.config.get("GMAIL_IMAP_USER", "")
+    imap_password = app.config.get("GMAIL_IMAP_PASSWORD", "")
+    if not imap_user or not imap_password:
         return
 
     try:
