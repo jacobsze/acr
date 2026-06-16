@@ -56,8 +56,23 @@ def materialize_if_needed(target_date: date, shift_type: str) -> None:
         .filter(User.active.is_(True))
         .all()
     )
+
+    # Honor self-removals: don't resurrect volunteers who removed themselves
+    # from this specific date/shift. build_schedule() hides them, so copying
+    # them in as real assignments would make them reappear (and re-adding one
+    # person to the shift would drag the removed regulars back in).
+    removed_ids = {
+        r.volunteer_id for r in ScheduleChangeLog.query.filter_by(
+            date=target_date, shift_type=shift_type,
+            action="remove", log_type="upcoming",
+        ).all()
+    }
+
+    added = False
     for rs in regular_entries:
         if not should_schedule_on_week(target_date, rs.frequency, rs.start_date):
+            continue
+        if rs.user_id in removed_ids:
             continue
         db.session.add(
             ShiftAssignment(
@@ -67,7 +82,8 @@ def materialize_if_needed(target_date: date, shift_type: str) -> None:
                 notes="Copied from regular schedule",
             )
         )
-    if regular_entries:
+        added = True
+    if added:
         db.session.commit()
 
 
@@ -149,7 +165,7 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
     return schedule
 
 
-# ── routes ────────────────────────────────────────────────────────────────────
+# ── routes ────────────────────────────────────────────────────────────────
 
 @schedule_bp.route("/public")
 def public_schedule():
