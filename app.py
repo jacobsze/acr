@@ -12,6 +12,10 @@ from models import db
 _gmail_check_running = threading.Event()
 _gmail_check_running.set()   # "set" means idle / not running
 
+# Guards against concurrent runs of the request-driven email fallbacks
+_open_shift_lock = threading.Lock()
+_weekly_email_lock = threading.Lock()
+
 
 def _get_version() -> str:
     """Return short git SHA — prefers RENDER_GIT_COMMIT env var set by Render."""
@@ -110,6 +114,13 @@ def create_app(config_class=Config) -> Flask:
     # ── 10 am open-shift alert (APScheduler CronTrigger) ─────────────────
     _start_open_shift_cron(app)
 
+    # ── Request-driven fallback for outbound scheduled emails ────────────
+    # APScheduler can silently miss its tick on Render (deploy/restart near
+    # the scheduled time drops the run). This safety net fires the alert /
+    # weekly email on the first request after the target time, deduped per
+    # day/week via AppSetting markers so nothing double-sends.
+    _wire_scheduled_email_fallback(app)
+
     return app
 
 
@@ -162,29 +173,37 @@ def _wire_gmail_check(app: Flask) -> None:
 
 
 def _start_open_shift_cron(app: Flask) -> None:
-    """Start APScheduler CronTrigger for the daily 10 am open-shift alert."""
-    imap_user = app.config.get("GMAIL_IMAP_USER", "")
-    imap_password = app.config.get("GMAIL_IMAP_PASSWORD", "")
-    if not imap_user or not imap_password:
+    """Start APScheduler CronTrigger for the daily 10 am open-shift alert.
+
+    These jobs only *send* email, so they are gated on SMTP credentials (not
+    IMAP). Jobs route through the deduped wrappers so they never double-send
+    with the request-driven fallback.
+    """
+    smtp_user = app.config.get("GMAIL_SMTP_USER", "")
+    smtp_password = app.config.get("GMAIL_SMTP_PASSWORD", "")
+    if not smtp_user or not smtp_password:
+        app.logger.info(
+            "SMTP credentials not configured – scheduled emails disabled. "
+            "Set GMAIL_SMTP_USER and GMAIL_SMTP_PASSWORD to enable."
+        )
         return
 
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
         from zoneinfo import ZoneInfo
-        from services.weekly_email import check_and_send_open_shift_alert, send_weekly_schedule_email
         from services.schedule_cron import extend_52week_schedule
 
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(
-            func=check_and_send_open_shift_alert,
+            func=_run_open_shift_alert,
             args=[app],
             trigger=CronTrigger(hour=10, minute=0, timezone=ZoneInfo("America/New_York")),
             id="open_shift_alert",
             replace_existing=True,
         )
         scheduler.add_job(
-            func=send_weekly_schedule_email,
+            func=_run_weekly_email,
             args=[app],
             trigger=CronTrigger(day_of_week="sun", hour=9, minute=0, timezone=ZoneInfo("America/New_York")),
             id="weekly_schedule_email",
@@ -204,6 +223,91 @@ def _start_open_shift_cron(app: Flask) -> None:
         app.logger.warning("APScheduler not installed – open-shift alert disabled.")
     except Exception as exc:
         app.logger.error("Failed to start open-shift cron: %s", exc)
+
+
+def _run_open_shift_alert(app: Flask) -> None:
+    """Run the open-shift alert at most once per ET day (cron + request fallback share this)."""
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    if not _open_shift_lock.acquire(blocking=False):
+        return  # Another run already in progress
+    try:
+        if not _claim_daily_marker(app, "last_open_shift_alert_date", today.isoformat()):
+            return  # Already done today
+        from services.weekly_email import check_and_send_open_shift_alert
+        check_and_send_open_shift_alert(app)
+    except Exception as exc:
+        app.logger.error("Open-shift alert failed: %s", exc, exc_info=True)
+    finally:
+        _open_shift_lock.release()
+
+
+def _run_weekly_email(app: Flask) -> None:
+    """Send the weekly schedule email at most once per ET week (cron + request fallback share this)."""
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    if not _weekly_email_lock.acquire(blocking=False):
+        return
+    try:
+        if not _claim_daily_marker(app, "last_weekly_email_date", today.isoformat()):
+            return  # Already sent for this Sunday
+        from services.weekly_email import send_weekly_schedule_email
+        send_weekly_schedule_email(app)
+    except Exception as exc:
+        app.logger.error("Weekly schedule email failed: %s", exc, exc_info=True)
+    finally:
+        _weekly_email_lock.release()
+
+
+def _claim_daily_marker(app: Flask, key: str, value: str) -> bool:
+    """Atomically claim a per-period marker. Returns True if newly claimed (caller should send)."""
+    from models import db, AppSetting
+    with app.app_context():
+        setting = db.session.get(AppSetting, key)
+        if setting and setting.value == value:
+            return False
+        if setting:
+            setting.value = value
+        else:
+            db.session.add(AppSetting(key=key, value=value))
+        db.session.commit()
+    return True
+
+
+def _wire_scheduled_email_fallback(app: Flask) -> None:
+    """Register a before_request hook that fires overdue scheduled emails.
+
+    Acts as a safety net for the APScheduler crons, which can miss their tick
+    on Render when the instance restarts near the scheduled time. Dedup is via
+    AppSetting markers, so this never causes a duplicate send.
+    """
+    smtp_user = app.config.get("GMAIL_SMTP_USER", "")
+    smtp_password = app.config.get("GMAIL_SMTP_PASSWORD", "")
+    if not smtp_user or not smtp_password:
+        return
+
+    @app.before_request
+    def _scheduled_email_fallback():
+        try:
+            from zoneinfo import ZoneInfo
+            now = datetime.now(ZoneInfo("America/New_York"))
+
+            # Open-shift alert: any time at/after 10:00 ET, once per day.
+            # Skip if a run is already in flight; the run itself dedupes via marker.
+            if now.hour >= 10 and not _open_shift_lock.locked():
+                threading.Thread(
+                    target=_run_open_shift_alert, args=[app], daemon=True,
+                    name="open-shift-fallback",
+                ).start()
+
+            # Weekly schedule email: Sundays at/after 9:00 ET, once per week.
+            if now.weekday() == 6 and now.hour >= 9 and not _weekly_email_lock.locked():
+                threading.Thread(
+                    target=_run_weekly_email, args=[app], daemon=True,
+                    name="weekly-email-fallback",
+                ).start()
+        except Exception as exc:
+            app.logger.warning("Scheduled-email fallback hook error (ignored): %s", exc)
 
 
 def _migrate_schema(app: Flask) -> None:
