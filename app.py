@@ -228,14 +228,18 @@ def _start_open_shift_cron(app: Flask) -> None:
 def _run_open_shift_alert(app: Flask) -> None:
     """Run the open-shift alert at most once per ET day (cron + request fallback share this)."""
     from zoneinfo import ZoneInfo
-    today = datetime.now(ZoneInfo("America/New_York")).date()
+    today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
     if not _open_shift_lock.acquire(blocking=False):
         return  # Another run already in progress
     try:
-        if not _claim_daily_marker(app, "last_open_shift_alert_date", today.isoformat()):
-            return  # Already done today
+        if _marker_matches(app, "last_open_shift_alert_date", today):
+            return  # Already handled today
         from services.weekly_email import check_and_send_open_shift_alert
-        check_and_send_open_shift_alert(app)
+        check_and_send_open_shift_alert(app)  # raises if the SMTP send fails
+        # Only mark done once the run completed without error, so a failed
+        # send (or transient error) retries on the next request instead of
+        # being permanently blocked for the day.
+        _set_marker(app, "last_open_shift_alert_date", today)
     except Exception as exc:
         app.logger.error("Open-shift alert failed: %s", exc, exc_info=True)
     finally:
@@ -245,33 +249,39 @@ def _run_open_shift_alert(app: Flask) -> None:
 def _run_weekly_email(app: Flask) -> None:
     """Send the weekly schedule email at most once per ET week (cron + request fallback share this)."""
     from zoneinfo import ZoneInfo
-    today = datetime.now(ZoneInfo("America/New_York")).date()
+    today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
     if not _weekly_email_lock.acquire(blocking=False):
         return
     try:
-        if not _claim_daily_marker(app, "last_weekly_email_date", today.isoformat()):
+        if _marker_matches(app, "last_weekly_email_date", today):
             return  # Already sent for this Sunday
         from services.weekly_email import send_weekly_schedule_email
-        send_weekly_schedule_email(app)
+        send_weekly_schedule_email(app)  # raises if the SMTP send fails
+        _set_marker(app, "last_weekly_email_date", today)
     except Exception as exc:
         app.logger.error("Weekly schedule email failed: %s", exc, exc_info=True)
     finally:
         _weekly_email_lock.release()
 
 
-def _claim_daily_marker(app: Flask, key: str, value: str) -> bool:
-    """Atomically claim a per-period marker. Returns True if newly claimed (caller should send)."""
+def _marker_matches(app: Flask, key: str, value: str) -> bool:
+    """Return True if the stored marker already equals value (i.e. already done)."""
     from models import db, AppSetting
     with app.app_context():
         setting = db.session.get(AppSetting, key)
-        if setting and setting.value == value:
-            return False
+        return bool(setting and setting.value == value)
+
+
+def _set_marker(app: Flask, key: str, value: str) -> None:
+    """Record that the per-period job completed successfully."""
+    from models import db, AppSetting
+    with app.app_context():
+        setting = db.session.get(AppSetting, key)
         if setting:
             setting.value = value
         else:
             db.session.add(AppSetting(key=key, value=value))
         db.session.commit()
-    return True
 
 
 def _wire_scheduled_email_fallback(app: Flask) -> None:
