@@ -3,7 +3,7 @@
 
 {% block content %}
 
-{# ── Week navigation ──────────────────────────────────────────────────────── #}
+{# ── Week navigation ─────────────────────────────────────────────────────────────── #}
 
 {% if is_admin_mode %}
 <div class="d-flex justify-content-end align-items-center gap-2 mt-3 mb-1 mx-auto sched-mobile-full flex-wrap" style="max-width:600px;">
@@ -44,7 +44,7 @@
   </a>
 </div>
 
-{# ── Schedule tables (2 weeks) ────────────────────────────────────────────── #}
+{# ── Schedule tables (2 weeks) ──────────────────────────────────────────────────────── #}
 {% set is_owner = current_user and current_user.role == 'owner' %}
 {% for week_info in all_weeks %}
 <div class="mb-4 mx-auto sched-mobile-full" style="max-width:600px;">
@@ -79,7 +79,7 @@
         <td class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if slot.count == 0 and d >= today %} sched-no-vol{% endif %}{% if is_past %} sched-past-shift{% endif %}">
 
           {% if is_admin_mode %}
-          {# ── ADMIN: one dropdown per slot ─────────────────────────────── #}
+          {# ── ADMIN: one dropdown per slot ──────────────────────────────────────────── #}
           {% for slot_idx in range(cap) %}
             {% set av = vols[slot_idx] if slot_idx < vols|length else none %}
             <div class="sched-slot-row">
@@ -102,7 +102,7 @@
           {% endfor %}
 
           {% else %}
-          {# ── VOLUNTEER (or owner view-as) view ───────────────────────── #}
+          {# ── VOLUNTEER (or owner view-as) view ─────────────────────────────────────── #}
           {% set my_id = effective_user.id %}
           {% set my_name = effective_user.name %}
           {% set show_add = not slot.user_assigned and vols|length < 2 and not slot.is_full and d >= today and not is_past %}
@@ -155,7 +155,7 @@
 </div>
 {% endfor %}{# week #}
 
-{# ── Fixed save bar (hidden until changes pending) ───────────────────────── #}
+{# ── Fixed save bar (hidden until changes pending) ────────────────────────────────────────────── #}
 <div id="save-bar"
      class="d-none position-fixed bottom-0 start-0 end-0 bg-white border-top shadow px-3 py-2"
      style="z-index:1050;">
@@ -173,7 +173,7 @@
   </div>
 </div>
 
-{# ── Confirmation modal ───────────────────────────────────────────────────── #}
+{# ── Confirmation modal ───────────────────────────────────────────────────────────────────── #}
 <div class="modal fade" id="confirmModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -190,14 +190,18 @@
         <button type="button" class="btn btn-success" id="btn-confirm">
           <i class="bi bi-check-circle"></i> <span id="btn-confirm-label">Confirm</span>
         </button>
+        <button type="button" class="btn btn-primary d-none" id="btn-confirm-notify">
+          <i class="bi bi-envelope-check"></i> Save + notify group
+        </button>
       </div>
     </div>
   </div>
 </div>
 
-{# ── Hidden form (submitted on confirm) ──────────────────────────────── #}
+{# ── Hidden form (submitted on confirm) ────────────────────────────────────── #}
 <form id="save-form" method="post" action="{{ url_for('schedule.bulk_save') }}">
   <input type="hidden" id="changes-input" name="changes_json" value="{}">
+  <input type="hidden" id="send-email-input" name="send_email" value="0">
   <input type="hidden" name="week_start" value="{{ week_start.isoformat() }}">
 </form>
 
@@ -217,7 +221,7 @@ const MY_NAME  = {{ effective_user.name | tojson }};
 let pendingAdds    = [];   // {date, shift_type, user_id, name}
 let pendingRemoves = [];
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────────────
 
 function fmtDate(iso) {
   const d = new Date(iso + 'T12:00:00');
@@ -232,7 +236,7 @@ function updateSaveBar() {
   bar.classList.toggle('d-none', n === 0);
 }
 
-// ── Admin mode: rebuild from selects ───────────────────────────────────────
+// ── Admin mode: rebuild from selects ─────────────────────────────────────────────────────
 
 function rebuildFromSelects() {
   pendingAdds = [];
@@ -272,7 +276,7 @@ if (IS_ADMIN) {
   });
 }
 
-// ── Volunteer mode: +/– buttons ────────────────────────────────────────────
+// ── Volunteer mode: +/– buttons ──────────────────────────────────────────────────────────
 
 function btnData(btn) {
   return {
@@ -376,7 +380,7 @@ function undoHTML(date, st, uid, uname) {
 // Attach initial volunteer listeners
 if (!IS_ADMIN) attachVolListeners(document.body);
 
-// ── Save bar buttons ────────────────────────────────────────────────────────
+// ── Save bar buttons ──────────────────────────────────────────────────────────────────
 
 let leavingIntentionally = false;
 
@@ -403,21 +407,32 @@ document.getElementById('btn-save')?.addEventListener('click', () => {
   if (IS_ADMIN) {
     document.getElementById('confirm-intro').textContent = 'Save the following changes?';
     document.getElementById('btn-confirm-label').textContent = 'Save changes';
+    document.getElementById('btn-confirm-notify').classList.remove('d-none');
   } else {
     document.getElementById('confirm-intro').textContent =
       'Save the following shifts and send an email to the volunteer group?';
     document.getElementById('btn-confirm-label').textContent = 'Save and notify group';
+    document.getElementById('btn-confirm-notify').classList.add('d-none');
   }
   new bootstrap.Modal(document.getElementById('confirmModal')).show();
 });
 
-document.getElementById('btn-confirm')?.addEventListener('click', () => {
+function submitChanges(sendEmail) {
   leavingIntentionally = true;
+  document.getElementById('send-email-input').value = sendEmail ? '1' : '0';
   document.getElementById('changes-input').value = JSON.stringify({
     adds:    pendingAdds.map(a => ({date:a.date, shift_type:a.shift_type, user_id:a.user_id})),
     removes: pendingRemoves.map(r => ({date:r.date, shift_type:r.shift_type, user_id:r.user_id})),
   });
   document.getElementById('save-form').submit();
+}
+
+document.getElementById('btn-confirm')?.addEventListener('click', () => {
+  submitChanges(!IS_ADMIN);  // non-admin always sends; admin "Save changes" does not
+});
+
+document.getElementById('btn-confirm-notify')?.addEventListener('click', () => {
+  submitChanges(true);
 });
 
 window.addEventListener('beforeunload', e => {

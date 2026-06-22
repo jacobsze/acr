@@ -412,6 +412,7 @@ def bulk_save():
     adds = changes.get("adds", [])
     removes = changes.get("removes", [])
     week_start_str = request.form.get("week_start", "")
+    send_email = request.form.get("send_email") == "1"
 
     effective_user = g.effective_user
     is_admin = g.user.is_admin_or_owner() and effective_user.id == g.user.id
@@ -495,9 +496,7 @@ def bulk_save():
     db.session.commit()
 
     if successes:
-        if g.user.role == "owner":
-            flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}).", "success")
-        else:
+        if send_email or g.user.role != "owner":
             try:
                 from services.weekly_email import send_schedule_change_email
                 send_schedule_change_email(
@@ -512,6 +511,8 @@ def bulk_save():
             except Exception as e:
                 current_app.logger.exception("Change notification email failed: %s", str(e))
                 flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}).", "success")
+        else:
+            flash(f"Schedule updated ({successes} change{'s' if successes != 1 else ''}).", "success")
     for e in errors[:3]:
         flash(e, "error")
 
