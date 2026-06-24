@@ -147,3 +147,43 @@ def _send_weekly_schedule_email(app, recipient=None):
     _send_gmail(app, target_recipient, subject, html_body)
     app.logger.info("Weekly schedule email sent – %s", subject)
     return {"recipient": target_recipient, "subject": subject}
+
+
+def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin, changed_by_email):
+    """Send notification of schedule changes to the group."""
+    with app.app_context():
+        return _send_schedule_change_email(app, changed_by_name, adds, removes, is_admin, changed_by_email)
+
+
+def _send_schedule_change_email(app, changed_by_name, adds, removes, is_admin, changed_by_email):
+    """Build and send schedule change notification email."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
+
+    change_list = []
+    if removes:
+        for r in removes:
+            change_list.append(f"<li><strong>{r['name']}</strong> removed from {r['date'].strftime('%a %b %-d')} {r['shift_type']}</li>")
+    if adds:
+        for a in adds:
+            change_list.append(f"<li><strong>{a['name']}</strong> added to {a['date'].strftime('%a %b %-d')} {a['shift_type']}</li>")
+
+    change_html = "\n".join(change_list)
+    change_count = len(removes) + len(adds)
+    subject = f"Schedule Update: {change_count} change{'s' if change_count != 1 else ''}"
+
+    html_body = f"""<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">
+<p>
+Schedule has been updated by <strong>{changed_by_name}</strong> ({changed_by_email}):
+</p>
+<ul>
+{change_html}
+</ul>
+<p>
+<a href="https://acr-schedule.onrender.com/schedule">View the schedule</a>
+</p>
+</body></html>"""
+
+    _send_gmail(app, CHANGE_NOTIFICATION_RECIPIENT, subject, html_body)
+    app.logger.info("Schedule change email sent by %s – %s", changed_by_name, subject)
+    return {"recipient": CHANGE_NOTIFICATION_RECIPIENT, "subject": subject}
