@@ -149,7 +149,7 @@
           {% set slot_vols = regular_by_slot.get((dow, shift_type), []) %}
           <td class="{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}">
             {% if slot_vols %}
-              {{ slot_vols | map(attribute='user.name') | join(', ') }}
+              {% for sv in slot_vols %}{{ sv.user.name }}{% if not loop.last %}, {% endif %}{% endfor %}
             {% else %}
               <span class="text-muted">—</span>
             {% endif %}
@@ -172,3 +172,43 @@ document.querySelectorAll('.regular-slot-select').forEach(sel => {
   new TomSelect(sel, {
     allowEmptyOption: true,
     maxOptions: null,
+    placeholder: '',
+  });
+});
+
+// Handle frequency/week selector visibility
+document.querySelectorAll('.regular-freq-select').forEach(freqSel => {
+  const weekSel = freqSel.nextElementSibling;
+  function updateWeekVisibility() {
+    if (freqSel.value === 'every_other_week') {
+      weekSel.style.display = 'block';
+    } else {
+      weekSel.style.display = 'none';
+    }
+  }
+  freqSel.addEventListener('change', updateWeekVisibility);
+  updateWeekVisibility();
+});
+
+// Toggle 3rd volunteer columns and adjust colspan
+const toggleBtn = document.getElementById('toggle-slot-2-btn');
+const amHeader = document.getElementById('am-shift-header');
+const pmHeader = document.getElementById('pm-shift-header');
+let slot2Visible = false;
+toggleBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  slot2Visible = !slot2Visible;
+  document.querySelectorAll('.slot-2-col').forEach(el => {
+    el.classList.toggle('show', slot2Visible);
+  });
+  // Update colspan to account for visible columns
+  const newColspan = slot2Visible ? 6 : 4;
+  amHeader.setAttribute('colspan', newColspan);
+  pmHeader.setAttribute('colspan', newColspan);
+  toggleBtn.innerHTML = slot2Visible
+    ? '<i class="bi bi-eye-slash"></i> Hide 3rd Volunteer'
+    : '<i class="bi bi-eye"></i> Show 3rd Volunteer';
+});
+</script>
+{% endif %}
+{% endblock %}
