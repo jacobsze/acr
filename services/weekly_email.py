@@ -33,7 +33,7 @@ def _build_table(all_weeks, highlight_date=None, highlight_shifts=None):
     hs = set(highlight_shifts or [])
     rows = [
         '<table style="border-collapse:collapse; font-family:Arial,Helvetica,sans-serif;'
-        ' font-size:14px; width:520px; max-width:100%;">' ,
+        ' font-size:14px; width:520px; max-width:100%;">',
         f'<tr><td colspan="3" style="{_TD_BASE} font-weight:bold; text-align:center;'
         ' background:#f0f0f0;">Volunteer Schedule</td></tr>',
     ]
@@ -57,7 +57,7 @@ def _build_table(all_weeks, highlight_date=None, highlight_shifts=None):
             hi_am = (d == highlight_date and "AM" in hs)
             hi_pm = (d == highlight_date and "PM" in hs)
             date_cell = (
-                f'<td style="{_TD_BASE} white-space:nowrap; font-size:0.85em;"'
+                f'<td style="{_TD_BASE} white-space:nowrap; font-size:0.85em;">'
                 f'{d.strftime("%A")}<br>{d.strftime("%-m/%-d/%Y")}</td>'
             )
             rows.append(f"<tr>{date_cell}{_cell(am_names, _AM_CELL, hi_am)}{_cell(pm_names, _PM_CELL, hi_pm)}</tr>")
@@ -125,7 +125,7 @@ def _send_weekly_schedule_email(app, recipient=None):
     end_label   = (week_start + timedelta(days=20)).strftime("%b %-d")
     subject     = f"ACR Schedule for {start_label} - {end_label}"
 
-    app_url = "https://acr-schedule.onrender.com/"
+    app_url = "https://acr-schedule.onrender.com/login"
     public_schedule_url = "https://acr-schedule.onrender.com/public"
     procedures_url = (
         "https://docs.google.com/document/d/e/"
@@ -180,7 +180,7 @@ Schedule has been updated by <strong>{changed_by_name}</strong> ({changed_by_ema
 {change_html}
 </ul>
 <p>
-<a href="https://acr-schedule.onrender.com/schedule">View the schedule</a>
+<a href="https://acr-schedule.onrender.com/login">View the schedule</a>
 </p>
 </body></html>"""
 
