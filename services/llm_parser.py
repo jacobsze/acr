@@ -195,3 +195,128 @@ Use "date_range" (and set "date" to null) when the email describes a span of tim
             "reason": "API error.",
             "error": str(exc),
         }
+
+
+def parse_owner_schedule_commands(
+    email_body: str,
+    volunteers: list,
+    today: date | None = None,
+) -> dict:
+    """
+    Parse one or more structured schedule commands from the owner/admin.
+
+    Returns:
+        {
+            "commands": [
+                {
+                    "action": "add" | "remove",
+                    "volunteer_email": "matched@email.com",
+                    "volunteer_name": "Matched Name",
+                    "date": "YYYY-MM-DD",
+                    "shift_type": "AM" | "PM",
+                    "confidence": "high",
+                    "reason": "brief explanation"
+                },
+                ...
+            ],
+            "unrecognized": ["lines that couldn't be parsed"],
+            "error": str | None
+        }
+    """
+    api_key = current_app.config.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return {"commands": [], "unrecognized": [], "error": "ANTHROPIC_API_KEY not set"}
+
+    if today is None:
+        today = date.today()
+
+    volunteer_list = "\n".join(f"- {v.name} ({v.email})" for v in volunteers)
+
+    prompt = f"""\
+You are managing schedule changes for a cat rescue shelter.
+
+Today's date: {today.strftime("%A, %B %d, %Y")}
+
+Registered volunteers:
+{volunteer_list}
+
+The shelter owner has sent one or more schedule instructions. Each line or bullet may be a \
+command in this format:
+  [Action] [Volunteer] [Date] [Shift]
+Where:
+  - Action = Add or Remove (case-insensitive)
+  - Volunteer = volunteer name (first name only, first name + last initial, or full name)
+  - Date = m/d format (e.g. "7/5") or "Next [day of week]" (e.g. "Next Thursday")
+  - Shift = AM or PM
+
+Owner's message:
+{email_body}
+
+---
+
+Extract ALL schedule commands from the message. For each:
+- Match the volunteer name to the registered list using fuzzy matching (first name, \
+first name + last initial, or full name). Return the exact matched email from the list above.
+- Convert dates to YYYY-MM-DD:
+  - For "m/d" or "m/d/yy": use {today.year} if the date hasn't passed yet, else {today.year + 1}
+  - For "Next [day of week]": find the next occurrence of that weekday strictly after today \
+({today.strftime("%A, %B %d")})
+- Treat all owner commands as high confidence
+- Ignore greetings, sign-offs, email signatures, and non-command text
+- Put any lines that look like commands but can't be fully parsed into "unrecognized"
+
+Respond with ONLY a JSON object — no markdown, no extra text:
+{{
+  "commands": [
+    {{
+      "action": "add" | "remove",
+      "volunteer_email": "matched@email.com",
+      "volunteer_name": "Matched Name",
+      "date": "YYYY-MM-DD",
+      "shift_type": "AM" | "PM",
+      "confidence": "high",
+      "reason": "brief explanation of the match/parse"
+    }}
+  ],
+  "unrecognized": ["any lines that look like commands but couldn't be fully parsed"]
+}}\
+"""
+
+    try:
+        import anthropic
+        import time
+
+        client = anthropic.Anthropic(api_key=api_key)
+        max_retries = 2
+        retry_delay = 1
+        for attempt in range(max_retries):
+            try:
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                break
+            except anthropic.RateLimitError:
+                if attempt < max_retries - 1:
+                    time.sleep(min(retry_delay, 3))
+                    retry_delay *= 2
+                else:
+                    return {"commands": [], "unrecognized": [], "error": "Rate limited by Anthropic API"}
+
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+        result = json.loads(raw)
+        result.setdefault("unrecognized", [])
+        result.setdefault("error", None)
+        return result
+
+    except json.JSONDecodeError as exc:
+        return {"commands": [], "unrecognized": [], "error": f"JSON parse error: {exc} | raw: {raw!r}"}
+    except Exception as exc:
+        return {"commands": [], "unrecognized": [], "error": str(exc)}
