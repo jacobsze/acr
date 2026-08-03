@@ -24,7 +24,7 @@ def normalize_phone(raw: str) -> tuple[str, str]:
     return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}", ""
 
 
-# ── Cat logs ─────────────────────────────────────────────────────────────────────────────
+# ── Cat logs ──────────────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/analyze-cat-emails", methods=["GET"])
 @owner_required
@@ -155,7 +155,7 @@ def cat_detail(cat_id):
     )
 
 
-# ── Dashboard ──────────────────────────────────────────────────────────────────────────────
+# ── Dashboard ─────────────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/")
 @admin_required
@@ -193,7 +193,7 @@ def dashboard():
     )
 
 
-# ── Volunteers ────────────────────────────────────────────────────────────────────────────
+# ── Volunteers ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/volunteers")
 @login_required
@@ -332,7 +332,7 @@ def deactivate_volunteer(user_id):
     return redirect(url_for("admin.volunteers"))
 
 
-# ── Regular Schedule ──────────────────────────────────────────────────────────────────────────
+# ── Regular Schedule ───────────────────────────────────────────────────────────────────────────
 
 DAYS_DISPLAY = [
     (6, "Sun"), (0, "Mon"), (1, "Tue"), (2, "Wed"),
@@ -443,9 +443,9 @@ def regular_schedule():
     regular_by_slot: dict = {}
     for rs in all_regular:
         key = (rs.day_of_week, rs.shift_type)
-        regular_by_slot.setdefault(key, []).append(rs.user)
+        regular_by_slot.setdefault(key, []).append(rs)
     for key in regular_by_slot:
-        regular_by_slot[key].sort(key=lambda u: u.name)
+        regular_by_slot[key].sort(key=lambda rs: rs.user.name)
 
     # Calculate the next occurrence of each day_of_week for date display
     today = _date.today()
