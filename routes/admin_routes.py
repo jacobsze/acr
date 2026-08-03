@@ -24,7 +24,7 @@ def normalize_phone(raw: str) -> tuple[str, str]:
     return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}", ""
 
 
-# ── Cat logs ──────────────────────────────────────────────────────────────────
+# ── Cat logs ─────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/analyze-cat-emails", methods=["GET"])
 @owner_required
@@ -155,7 +155,7 @@ def cat_detail(cat_id):
     )
 
 
-# ── Dashboard ─────────────────────────────────────────────────────────────────
+# ── Dashboard ──────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/")
 @admin_required
@@ -193,7 +193,7 @@ def dashboard():
     )
 
 
-# ── Volunteers ────────────────────────────────────────────────────────────────
+# ── Volunteers ────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/volunteers")
 @login_required
@@ -332,7 +332,7 @@ def deactivate_volunteer(user_id):
     return redirect(url_for("admin.volunteers"))
 
 
-# ── Regular Schedule ──────────────────────────────────────────────────────────
+# ── Regular Schedule ──────────────────────────────────────────────────────────────────────────
 
 DAYS_DISPLAY = [
     (6, "Sun"), (0, "Mon"), (1, "Tue"), (2, "Wed"),
@@ -354,6 +354,8 @@ def bootstrap_schedule():
     try:
         today = date.today()
         end = today + timedelta(weeks=52)
+        # Fixed epoch for bi-weekly calculations (ensures consistency across runs)
+        bootstrap_epoch = date(2026, 1, 1)
 
         # Find all dates that already have ANY assignments
         existing_dates = set(
@@ -390,7 +392,7 @@ def bootstrap_schedule():
                     )
                     for rs in reg_entries:
                         # Check if this date should be scheduled based on frequency
-                        if not should_schedule_on_week(target_date, rs.frequency, rs.start_date):
+                        if not should_schedule_on_week(target_date, bootstrap_epoch, rs.frequency, rs.start_week or 0):
                             continue
 
                         db.session.add(ShiftAssignment(
@@ -441,9 +443,9 @@ def regular_schedule():
     regular_by_slot: dict = {}
     for rs in all_regular:
         key = (rs.day_of_week, rs.shift_type)
-        regular_by_slot.setdefault(key, []).append(rs)
+        regular_by_slot.setdefault(key, []).append(rs.user)
     for key in regular_by_slot:
-        regular_by_slot[key].sort(key=lambda rs: rs.user.name)
+        regular_by_slot[key].sort(key=lambda u: u.name)
 
     # Calculate the next occurrence of each day_of_week for date display
     today = _date.today()
@@ -464,7 +466,7 @@ def regular_schedule():
         regular_by_slot=regular_by_slot,
         days_display=DAYS_DISPLAY,
         cap=cap,
-        is_admin=g.user.is_admin_or_owner(),
+        is_admin=g.user.is_admin_or_owner() and g.effective_user.id == g.user.id,
         next_dates=next_dates,
     )
 
@@ -477,17 +479,7 @@ def save_regular_schedule():
     active_ids = {u.id for u in User.query.filter_by(active=True).all()}
     cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
 
-    # Calculate next occurrence of each day of week (for start_date calculation)
-    today = date.today()
-    next_dates = {}  # day_of_week -> (week0_date, week1_date)
-    for dow in range(7):
-        days_ahead = (dow - today.weekday()) % 7
-        if days_ahead == 0:
-            days_ahead = 7
-        next_occurrence = today + timedelta(days=days_ahead)
-        next_dates[dow] = (next_occurrence, next_occurrence + timedelta(weeks=1))
-
-    # Build mapping: (dow, shift_type, slot_idx) -> (user_id, frequency, start_date)
+    # Build mapping: (dow, shift_type, slot_idx) -> (user_id, frequency, start_week)
     slot_config = {}
     for dow in range(7):
         for shift_type in ("AM", "PM"):
@@ -499,29 +491,24 @@ def save_regular_schedule():
                     try:
                         uid = int(val)
                         if uid in active_ids:
-                            # Calculate actual start_date based on start_week selection
-                            start_date = None
-                            if freq == "every_other_week":
-                                week_idx = int(week) if week in ("0", "1") else 0
-                                start_date = next_dates[dow][week_idx]
                             slot_config[(dow, shift_type, slot_idx)] = {
                                 "user_id": uid,
                                 "frequency": freq,
-                                "start_date": start_date,
+                                "start_week": int(week) if freq == "every_other_week" else None,
                             }
                     except ValueError:
                         pass
 
-    # Build new_set and mapping from (uid, dow, shift_type) -> (frequency, start_date)
+    # Build new_set and mapping from (uid, dow, shift_type) -> (frequency, start_week)
     new_set: set[tuple] = set()
-    freq_by_entry = {}  # (uid, dow, shift_type) -> (frequency, start_date)
+    freq_by_entry = {}  # (uid, dow, shift_type) -> (frequency, start_week)
     for (dow, shift_type, slot_idx), config in slot_config.items():
         uid = config["user_id"]
         key = (uid, dow, shift_type)
         new_set.add(key)
         # Use the first (lowest slot_idx) occurrence
         if key not in freq_by_entry:
-            freq_by_entry[key] = (config["frequency"], config["start_date"])
+            freq_by_entry[key] = (config["frequency"], config["start_week"])
 
     current = {
         (rs.user_id, rs.day_of_week, rs.shift_type): rs
@@ -550,19 +537,17 @@ def save_regular_schedule():
                 shift_type=shift_type,
             )
 
-    new_entries = []
-    updated_entries = []
     for key in new_set:
         if key not in current:
-            # Addition: update RegularSchedule and immediately generate assignments
+            # Addition: just update RegularSchedule; cron will generate assignments
             user_id, dow, shift_type = key
-            freq, start_dt = freq_by_entry.get(key, ("weekly", None))
+            freq, start_week = freq_by_entry.get(key, ("weekly", None))
             db.session.add(RegularSchedule(
                 user_id=user_id,
                 day_of_week=dow,
                 shift_type=shift_type,
                 frequency=freq,
-                start_date=start_dt,
+                start_week=start_week,
             ))
             db.session.add(ScheduleChangeLog(
                 log_type="regular", day_of_week=dow, shift_type=shift_type,
@@ -570,55 +555,13 @@ def save_regular_schedule():
                 volunteer_name=user_map.get(user_id, str(user_id)),
                 changed_by_id=g.user.id,
             ))
-            new_entries.append((user_id, dow, shift_type, freq, start_dt))
-        else:
-            # Update: check if frequency or start_date changed
-            user_id, dow, shift_type = key
-            rs = current[key]
-            freq, start_dt = freq_by_entry.get(key, ("weekly", None))
-            if rs.frequency != freq or rs.start_date != start_dt:
-                rs.frequency = freq
-                rs.start_date = start_dt
-                updated_entries.append((user_id, dow, shift_type, freq, start_dt))
 
     db.session.commit()
-
-    # Immediately generate assignments for newly added volunteers
-    for user_id, dow, shift_type, freq, start_dt in new_entries:
-        handle_regular_schedule_change(
-            current_app._get_current_object(),
-            action="add",
-            user_id=user_id,
-            day_of_week=dow,
-            shift_type=shift_type,
-            frequency=freq,
-            start_date=start_dt,
-        )
-
-    # For updated entries, remove old assignments and generate new ones
-    for user_id, dow, shift_type, freq, start_dt in updated_entries:
-        handle_regular_schedule_change(
-            current_app._get_current_object(),
-            action="remove",
-            user_id=user_id,
-            day_of_week=dow,
-            shift_type=shift_type,
-        )
-        handle_regular_schedule_change(
-            current_app._get_current_object(),
-            action="add",
-            user_id=user_id,
-            day_of_week=dow,
-            shift_type=shift_type,
-            frequency=freq,
-            start_date=start_dt,
-        )
-
     flash("Regular schedule saved.", "success")
     return redirect(url_for("admin.regular_schedule"))
 
 
-# ── Admin Management (owner only) ─────────────────────────────────────────────
+# ── Admin Management (owner only) ─────────────────────────────────────────────────────
 
 @admin_bp.route("/admins")
 @owner_required
@@ -656,7 +599,7 @@ def revoke_admin():
     return redirect(url_for("admin.manage_admins"))
 
 
-# ── Change log ────────────────────────────────────────────────────────────────
+# ── Change log ────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/change-log")
 @admin_required
@@ -670,15 +613,14 @@ def change_log():
     return render_template("admin_change_log.html", logs=logs)
 
 
-# ── Weekly schedule email ─────────────────────────────────────────────────────
+# ── Weekly schedule email ────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/send-weekly-email", methods=["POST"])
 @admin_required
 def send_weekly_email():
     try:
         from services.weekly_email import send_weekly_schedule_email
-        recipient = request.form.get("recipient")
-        result = send_weekly_schedule_email(current_app._get_current_object(), recipient=recipient)
+        result = send_weekly_schedule_email(current_app._get_current_object())
         flash(f"Weekly schedule email sent to {result['recipient']}.", "success")
     except Exception as exc:
         flash(f"Failed to send weekly email: {exc}", "error")
@@ -705,7 +647,7 @@ def test_open_shift_email():
                                                  week_start=date.today().isoformat()))
 
 
-# ── Email log ─────────────────────────────────────────────────────────────────
+# ── Email log ──────────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/email-log/check", methods=["POST"])
 @admin_required
@@ -740,16 +682,12 @@ def email_log():
     from sqlalchemy import func
     NY = ZoneInfo("America/New_York")
 
-    page = request.args.get("page", 1, type=int)
-    per_page = 25
-
-    logs_query = (
+    logs = (
         EmailProcessingLog.query
         .order_by(func.coalesce(EmailProcessingLog.sent_at, EmailProcessingLog.processed_at).desc())
+        .limit(100)
+        .all()
     )
-
-    paginated = logs_query.paginate(page=page, per_page=per_page, error_out=False)
-    logs = paginated.items
 
     last_check = None
     setting = AppSetting.query.get("last_email_check")
@@ -770,26 +708,10 @@ def email_log():
         last_check=last_check,
         next_check=next_check,
         check_interval=current_app.config.get("GMAIL_CHECK_INTERVAL_MINUTES", 5),
-        pagination=paginated,
-        page=page,
     )
 
 
-@admin_bp.route("/email-log/resend-schedule", methods=["POST"])
-@owner_required
-def resend_weekly_schedule():
-    """Manually resend the weekly schedule email."""
-    from services.weekly_email import send_weekly_schedule_email
-    try:
-        result = send_weekly_schedule_email(current_app._get_current_object())
-        flash(f"Weekly schedule email sent to {result.get('recipient', 'unknown')}", "success")
-    except Exception as e:
-        current_app.logger.exception("Failed to resend weekly schedule email")
-        flash(f"Failed to send email: {str(e)}", "error")
-    return redirect(url_for("admin.email_log"))
-
-
-# ── AI Settings ───────────────────────────────────────────────────────────────
+# ── AI Settings ───────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route("/settings", methods=["GET", "POST"])
 @owner_required
