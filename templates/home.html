@@ -4,7 +4,7 @@
 {% block content %}
 <div class="mt-3 home-wrap">
   <h5 class="mb-3">
-    Hi, {{ effective_user.name.split()[0] }}!
+    Welcome, {{ effective_user.name.split()[0] }}!
     {% if view_as_user %}
       <span class="text-muted fw-normal fs-6">Viewing as {{ effective_user.name }}</span>
     {% endif %}
