@@ -1,6 +1,7 @@
 """Send the weekly volunteer schedule email and daily open-shift alerts."""
 import base64
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -147,6 +148,67 @@ def _send_weekly_schedule_email(app, recipient=None):
     _send_gmail(app, target_recipient, subject, html_body)
     app.logger.info("Weekly schedule email sent – %s", subject)
     return {"recipient": target_recipient, "subject": subject}
+
+
+# ── Daily open-shift alert ────────────────────────────────────────────────────
+
+def _open_shifts_for_date(target_date, override_open=None):
+    """
+    Return list of shift types ('AM', 'PM') with 0 volunteers on target_date.
+    override_open: if provided, use this list instead of querying the DB (for testing).
+    """
+    if override_open is not None:
+        return list(override_open)
+    from routes.schedule_routes import build_schedule
+    sched = build_schedule([target_date], None)
+    return [st for st in ("AM", "PM") if sched[target_date][st]["count"] == 0]
+
+
+def _open_shift_subject(open_shifts, target_date):
+    date_str = target_date.strftime("%-m/%-d")
+    day_str  = target_date.strftime("%a")
+    if len(open_shifts) == 2:
+        return f"AM and PM shifts are open on {date_str} ({day_str}) - can anyone cover?"
+    shift = open_shifts[0]
+    return f"{shift} shift is open on {date_str} ({day_str}) - can anyone cover?"
+
+
+def send_open_shift_alert(app, target_date, open_shifts):
+    """Send the open-shift alert for target_date. open_shifts is ['AM'], ['PM'], or ['AM','PM']."""
+    from routes.schedule_routes import get_week_start, get_week_dates, build_schedule
+
+    week_start = get_week_start(target_date)
+    week_dates = get_week_dates(week_start)
+    schedule   = build_schedule(week_dates, None)
+    all_weeks  = [{
+        "week_start": week_start,
+        "week_end":   week_start + timedelta(days=6),
+        "week_dates": week_dates,
+        "schedule":   schedule,
+    }]
+
+    subject  = _open_shift_subject(open_shifts, target_date)
+    table    = _build_table(all_weeks, highlight_date=target_date, highlight_shifts=open_shifts)
+    html_body = f"""<html><body style="font-family:Arial,Helvetica,sans-serif; font-size:14px; color:#222;">
+<p>Please let the group know if you can. Thanks!</p>
+{table}
+</body></html>"""
+
+    _send_gmail(app, OPEN_SHIFT_EMAIL_RECIPIENT, subject, html_body)
+    app.logger.info("Open-shift alert sent – %s", subject)
+    return {"recipient": OPEN_SHIFT_EMAIL_RECIPIENT, "subject": subject}
+
+
+def check_and_send_open_shift_alert(app):
+    """Scheduled job: runs at 10am ET. Sends alert if shifts 2 days out have no volunteers."""
+    with app.app_context():
+        ny_now = datetime.now(ZoneInfo("America/New_York"))
+        target_date = ny_now.date() + timedelta(days=2)
+        open_shifts = _open_shifts_for_date(target_date)
+        if open_shifts:
+            send_open_shift_alert(app, target_date, open_shifts)
+        else:
+            app.logger.info("Open-shift check: all shifts covered for %s", target_date)
 
 
 def send_schedule_change_email(app, changed_by_name, adds, removes, is_admin, changed_by_email):
