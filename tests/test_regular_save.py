@@ -28,18 +28,45 @@ class RegularSaveTest(unittest.TestCase):
             self.assertEqual(shift.frequency, 'weekly')
             self.assertIsNone(shift.start_date)
             self.assertEqual(ScheduleChangeLog.query.one().action, 'add')
+            assignments = ShiftAssignment.query.all()
+            self.assertEqual(len(assignments), 52)
+            self.assertTrue(all(a.date >= date.today() and a.date.weekday() == 0 for a in assignments))
+
+    def test_add_preserves_existing_shifts_and_removals(self):
+        saturday = date.today() + timedelta(days=(5-date.today().weekday()) % 7)
+        with self.app.app_context():
+            db.session.add_all([
+                ShiftAssignment(user_id=3, date=saturday, shift_type='PM', notes='Manual'),
+                ShiftAssignment(user_id=2, date=saturday+timedelta(weeks=1), shift_type='PM', notes='Extra'),
+                ShiftAssignment(user_id=2, date=saturday-timedelta(weeks=1), shift_type='PM', notes='Past'),
+                ScheduleChangeLog(log_type='upcoming', action='remove', volunteer_id=2, date=saturday+timedelta(weeks=2), shift_type='PM'),
+            ])
+            db.session.commit()
+        self.assertEqual(self.client.post('/admin/regular/save', data={'spot_5_PM_0':'2'}).status_code, 302)
+        with self.app.app_context():
+            self.assertEqual(ShiftAssignment.query.filter_by(date=saturday, shift_type='PM').count(), 2)
+            self.assertEqual(ShiftAssignment.query.filter_by(user_id=2, date=saturday+timedelta(weeks=2)).count(), 0)
+            self.assertEqual({a.notes for a in ShiftAssignment.query.filter(ShiftAssignment.notes.in_(['Manual','Extra','Past'])).all()}, {'Manual','Extra','Past'})
+            count = ShiftAssignment.query.count()
+        self.client.post('/admin/regular/save', data={'spot_5_PM_0':'2'})
+        with self.app.app_context():
+            self.assertEqual(ShiftAssignment.query.count(), count)
 
     def test_alternating_date_choices(self):
         for week in (0, 1):
             with self.subTest(week=week):
                 with self.app.app_context():
                     RegularSchedule.query.delete()
+                    ShiftAssignment.query.delete()
                     db.session.commit()
                 dow = date.today().weekday()
                 response = self.client.post('/admin/regular/save', data={f'spot_{dow}_PM_0':'2', f'freq_{dow}_PM_0':'every_other_week', f'week_{dow}_PM_0':str(week)})
                 self.assertEqual(response.status_code, 302)
                 with self.app.app_context():
                     self.assertEqual(RegularSchedule.query.one().start_date, date.today() + timedelta(weeks=1+week))
+                    dates = sorted(a.date for a in ShiftAssignment.query.all())
+                    self.assertEqual(dates[0], date.today()+timedelta(weeks=1+week))
+                    self.assertTrue(all((d-dates[0]).days % 14 == 0 for d in dates))
 
     def seed_removal(self):
         today = date.today()

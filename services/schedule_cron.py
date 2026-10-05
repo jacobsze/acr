@@ -146,7 +146,7 @@ def handle_regular_schedule_change(app, action: str, user_id: int, day_of_week: 
         start_date: for every_other_week, the actual start date
         commit: False joins the caller's app context and transaction.
     """
-    from models import db, ShiftAssignment
+    from models import db, ShiftAssignment, ScheduleChangeLog
 
     with app.app_context() if commit else nullcontext():
         today = date.today()
@@ -171,11 +171,23 @@ def handle_regular_schedule_change(app, action: str, user_id: int, day_of_week: 
         elif action == "add":
             # Immediately generate 52 weeks of assignments for this volunteer
             end = today + timedelta(weeks=52)
+            removed_dates = {
+                row.date for row in ScheduleChangeLog.query.filter(
+                    ScheduleChangeLog.volunteer_id == user_id,
+                    ScheduleChangeLog.shift_type == shift_type,
+                    ScheduleChangeLog.log_type == "upcoming",
+                    ScheduleChangeLog.action == "remove",
+                    ScheduleChangeLog.date >= today,
+                    ScheduleChangeLog.date < end,
+                ).all()
+            }
             added = 0
             current = today
             while current < end:
                 if current.weekday() == day_of_week:
-                    if should_schedule_on_week(current, frequency, start_date):
+                    if (current not in removed_dates
+                            and (start_date is None or current >= start_date)
+                            and should_schedule_on_week(current, frequency, start_date)):
                         exists = ShiftAssignment.query.filter_by(
                             date=current, shift_type=shift_type, user_id=user_id
                         ).first()

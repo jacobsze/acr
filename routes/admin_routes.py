@@ -540,7 +540,7 @@ def save_regular_schedule():
 
     for key in new_set:
         if key not in current:
-            # Addition: just update RegularSchedule; cron will generate assignments
+            # Populate existing upcoming weeks as part of the same save.
             user_id, dow, shift_type = key
             freq, start_week = freq_by_entry.get(key, ("weekly", None))
             start_date = None
@@ -556,6 +556,11 @@ def save_regular_schedule():
                 frequency=freq,
                 start_date=start_date,
             ))
+            handle_regular_schedule_change(
+                current_app._get_current_object(), action="add",
+                user_id=user_id, day_of_week=dow, shift_type=shift_type,
+                frequency=freq, start_date=start_date, commit=False,
+            )
             db.session.add(ScheduleChangeLog(
                 log_type="regular", day_of_week=dow, shift_type=shift_type,
                 action="add", volunteer_id=user_id,
