@@ -535,6 +535,7 @@ def save_regular_schedule():
                 user_id=user_id,
                 day_of_week=dow,
                 shift_type=shift_type,
+                commit=False,
             )
 
     for key in new_set:
@@ -542,12 +543,18 @@ def save_regular_schedule():
             # Addition: just update RegularSchedule; cron will generate assignments
             user_id, dow, shift_type = key
             freq, start_week = freq_by_entry.get(key, ("weekly", None))
+            start_date = None
+            if freq == "every_other_week":
+                # Match the two date choices displayed by regular_schedule().
+                today = date.today()
+                days_ahead = (dow - today.weekday()) % 7 or 7
+                start_date = today + timedelta(days=days_ahead, weeks=start_week)
             db.session.add(RegularSchedule(
                 user_id=user_id,
                 day_of_week=dow,
                 shift_type=shift_type,
                 frequency=freq,
-                start_week=start_week,
+                start_date=start_date,
             ))
             db.session.add(ScheduleChangeLog(
                 log_type="regular", day_of_week=dow, shift_type=shift_type,
