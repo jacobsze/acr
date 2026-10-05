@@ -1,5 +1,6 @@
 """Sunday cron job to extend the 52-week rolling schedule."""
 import logging
+from contextlib import nullcontext
 from datetime import date, timedelta
 
 logger = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ def extend_52week_schedule(app):
 
 def handle_regular_schedule_change(app, action: str, user_id: int, day_of_week: int,
                                     shift_type: str, frequency: str = "weekly",
-                                    start_date: date = None):
+                                    start_date: date = None, commit: bool = True):
     """
     When RegularSchedule is edited, cascade changes to all future ShiftAssignments.
 
@@ -143,10 +144,11 @@ def handle_regular_schedule_change(app, action: str, user_id: int, day_of_week: 
         shift_type: 'AM' or 'PM'
         frequency: 'weekly' or 'every_other_week'
         start_date: for every_other_week, the actual start date
+        commit: False joins the caller's app context and transaction.
     """
     from models import db, ShiftAssignment
 
-    with app.app_context():
+    with app.app_context() if commit else nullcontext():
         today = date.today()
 
         if action == "remove":
@@ -162,7 +164,8 @@ def handle_regular_schedule_change(app, action: str, user_id: int, day_of_week: 
                     "[REGULAR_SCHEDULE] Removed user %d from %s (date %s, from pattern %s %s)",
                     user_id, assign.date, day_of_week, day_of_week, shift_type
                 )
-            db.session.commit()
+            if commit:
+                db.session.commit()
             return {"status": "success", "removed": len(matching)}
 
         elif action == "add":
@@ -185,7 +188,8 @@ def handle_regular_schedule_change(app, action: str, user_id: int, day_of_week: 
                             ))
                             added += 1
                 current += timedelta(days=1)
-            db.session.commit()
+            if commit:
+                db.session.commit()
             app.logger.info(
                 "[REGULAR_SCHEDULE] Added user %d to pattern %s %s — generated %d assignments",
                 user_id, day_of_week, shift_type, added
