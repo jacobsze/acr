@@ -19,7 +19,7 @@
         <th>Contact</th>
         <th class="text-center vol-hide-mobile">Regular</th>
         <th class="text-center vol-hide-mobile">Next 7 Days</th>
-        <th class="text-center" title="Latest recorded shift before today; attendance is not tracked.">Most recent volunteer shift</th>
+        <th class="text-center" title="Latest recorded past shift, or next scheduled shift when there are no past shifts. Attendance is not tracked.">Most recent volunteer shift</th>
         <th class="text-center vol-hide-mobile">Last Login</th>
       </tr>
     </thead>
@@ -64,9 +64,9 @@
         <td class="text-center text-muted small">
           {% set recent = recent_shifts.get(v.id) %}
           {% if recent %}
-            <span class="text-nowrap">{{ recent.date.strftime('%b %-d, %Y') }}</span> {{ recent.shift_type }}
+            <span class="text-nowrap">{{ recent.date.strftime('%-m/%-d/%Y') }} {{ recent.shift_type }} shift</span>
           {% else %}
-            No past shifts
+            No shifts
           {% endif %}
         </td>
         <td class="text-center vol-hide-mobile text-muted small">{{ v.last_login | et_fmt }}</td>

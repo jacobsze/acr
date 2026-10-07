@@ -235,7 +235,7 @@ def volunteers():
 
 
 def _most_recent_volunteer_shifts():
-    # Use recorded assignments, not today's or future planned shifts.
+    # Prefer recorded past assignments; otherwise use the next scheduled shift.
     today = datetime.now(ZoneInfo("America/New_York")).date()
     latest_dates = (
         db.session.query(ShiftAssignment.user_id,
@@ -255,6 +255,24 @@ def _most_recent_volunteer_shifts():
     recent = {}
     for row in rows:
         # PM is later than AM when both were assigned on the same date.
+        recent.setdefault(row.user_id, row)
+    next_dates = (
+        db.session.query(ShiftAssignment.user_id,
+                         func.min(ShiftAssignment.date).label("shift_date"))
+        .filter(ShiftAssignment.date >= today)
+        .group_by(ShiftAssignment.user_id)
+        .subquery()
+    )
+    upcoming = (
+        db.session.query(ShiftAssignment.user_id, ShiftAssignment.date,
+                         ShiftAssignment.shift_type)
+        .join(next_dates, (ShiftAssignment.user_id == next_dates.c.user_id)
+              & (ShiftAssignment.date == next_dates.c.shift_date))
+        .order_by(ShiftAssignment.shift_type.asc())
+        .all()
+    )
+    for row in upcoming:
+        # Keep past shifts when available; otherwise prefer AM on the next date.
         recent.setdefault(row.user_id, row)
     return recent
 
