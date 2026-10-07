@@ -19,6 +19,7 @@
         <th>Contact</th>
         <th class="text-center vol-hide-mobile">Regular</th>
         <th class="text-center vol-hide-mobile">Next 7 Days</th>
+        <th class="text-center" title="Latest recorded shift before today; attendance is not tracked.">Most recent volunteer shift</th>
         <th class="text-center vol-hide-mobile">Last Login</th>
       </tr>
     </thead>
@@ -60,15 +61,23 @@
         </td>
         <td class="text-center vol-hide-mobile text-muted">{{ regular_counts.get(v.id, 0) }}</td>
         <td class="text-center vol-hide-mobile text-muted">{{ upcoming_counts.get(v.id, 0) }}</td>
+        <td class="text-center text-muted small">
+          {% set recent = recent_shifts.get(v.id) %}
+          {% if recent %}
+            <span class="text-nowrap">{{ recent.date.strftime('%b %-d, %Y') }}</span> {{ recent.shift_type }}
+          {% else %}
+            No past shifts
+          {% endif %}
+        </td>
         <td class="text-center vol-hide-mobile text-muted small">{{ v.last_login | et_fmt }}</td>
       </tr>
       {% if loop.first and volunteers|length > 1 %}
       <tr class="vol-divider-row">
-        <td colspan="5" class="p-0"><div style="height:3px; background:var(--acr-primary); opacity:.2;"></div></td>
+        <td colspan="6" class="p-0"><div style="height:3px; background:var(--acr-primary); opacity:.2;"></div></td>
       </tr>
       {% endif %}
       {% else %}
-      <tr><td colspan="5" class="text-center text-muted">No volunteers yet.</td></tr>
+      <tr><td colspan="6" class="text-center text-muted">No volunteers yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>

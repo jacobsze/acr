@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint, flash, g, redirect, render_template,
@@ -229,7 +230,33 @@ def volunteers():
         volunteers=all_users,
         regular_counts=regular_counts,
         upcoming_counts=upcoming_counts,
+        recent_shifts=_most_recent_volunteer_shifts(),
     )
+
+
+def _most_recent_volunteer_shifts():
+    # Use recorded assignments, not today's or future planned shifts.
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    latest_dates = (
+        db.session.query(ShiftAssignment.user_id,
+                         func.max(ShiftAssignment.date).label("shift_date"))
+        .filter(ShiftAssignment.date < today)
+        .group_by(ShiftAssignment.user_id)
+        .subquery()
+    )
+    rows = (
+        db.session.query(ShiftAssignment.user_id, ShiftAssignment.date,
+                         ShiftAssignment.shift_type)
+        .join(latest_dates, (ShiftAssignment.user_id == latest_dates.c.user_id)
+              & (ShiftAssignment.date == latest_dates.c.shift_date))
+        .order_by(ShiftAssignment.shift_type.desc())
+        .all()
+    )
+    recent = {}
+    for row in rows:
+        # PM is later than AM when both were assigned on the same date.
+        recent.setdefault(row.user_id, row)
+    return recent
 
 
 @admin_bp.route("/volunteers/add", methods=["POST"])
