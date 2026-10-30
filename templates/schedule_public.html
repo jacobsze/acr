@@ -2,7 +2,7 @@
 {% block title %}Volunteer Schedule – Petco86{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4 public-schedule">
   <div class="row justify-content-center">
     <div class="col-lg-10">
       <h1 class="mb-4">Petco86 Volunteer Schedule</h1>
@@ -14,12 +14,12 @@
         </h3>
 
         <div class="table-responsive">
-          <table class="table table-bordered table-sm">
+          <table class="table table-bordered table-sm public-schedule-table">
             <thead>
               <tr>
                 <th style="width: 25%;">Date</th>
-                <th style="width: 37.5%;">AM Shift</th>
-                <th style="width: 37.5%;">PM Shift</th>
+                <th class="sched-am-hdr" style="width: 37.5%;">AM Shift</th>
+                <th class="sched-pm-hdr" style="width: 37.5%;">PM Shift</th>
               </tr>
             </thead>
             <tbody>
@@ -36,7 +36,7 @@
                       <div>{{ vol.name }}</div>
                     {% endfor %}
                   {% else %}
-                    <span class="text-danger font-weight-bold">Need Volunteers</span>
+                    <span class="sched-need-vol">Need Volunteers</span>
                   {% endif %}
                 </td>
                 <td>
@@ -46,7 +46,7 @@
                       <div>{{ vol.name }}</div>
                     {% endfor %}
                   {% else %}
-                    <span class="text-danger font-weight-bold">Need Volunteers</span>
+                    <span class="sched-need-vol">Need Volunteers</span>
                   {% endif %}
                 </td>
               </tr>
