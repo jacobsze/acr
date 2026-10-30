@@ -53,6 +53,7 @@
   </div>
   <div class="table-responsive">
   <table class="table table-bordered sched-table mb-0">
+    <colgroup><col class="sched-day-width"><col><col></colgroup>
     <thead>
       <tr>
         <th class="sched-date-col"></th>
@@ -134,12 +135,12 @@
           {% if show_add %}
             <div class="sched-slot-row vol-slot vol-empty" data-user-id="">
               <button type="button"
-                      class="btn btn-outline-success btn-sm sched-add-btn btn-add-self"
+                      class="btn btn-sm sched-add-btn btn-add-self"
                       data-date="{{ d.isoformat() }}"
                       data-shift-type="{{ shift_type }}"
                       data-user-id="{{ my_id }}"
                       data-user-name="{{ my_name }}">
-                <i class="bi bi-plus-circle"></i> Sign up
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> Sign up
               </button>
             </div>
           {% endif %}
@@ -365,9 +366,9 @@ function mineHTML(date, st, uid, uname) {
 }
 
 function addBtnHTML(date, st, uid, uname) {
-  return `<button type="button" class="btn btn-outline-success btn-sm sched-add-btn btn-add-self"
+  return `<button type="button" class="btn btn-sm sched-add-btn btn-add-self"
     data-date="${date}" data-shift-type="${st}" data-user-id="${uid}" data-user-name="${uname}">
-    <i class="bi bi-plus-circle"></i> Sign up</button>`;
+    <i class="bi bi-plus-lg" aria-hidden="true"></i> Sign up</button>`;
 }
 
 function undoHTML(date, st, uid, uname) {
@@ -443,4 +444,5 @@ window.addEventListener('beforeunload', e => {
 });
 
 </script>
+<script src="{{ url_for('static', filename='schedule-layout.js', v=config.APP_VERSION) }}"></script>
 {% endblock %}

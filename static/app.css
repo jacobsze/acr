@@ -521,3 +521,35 @@ main { max-width: 1480px; margin: auto; }
   .sched-mobile-full > form { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
   .sched-mobile-full > form .form-select { max-width: 100%; }
 }
+
+/* Upcoming schedule: equal shift columns and clearly separated days. */
+.sched-table { table-layout: fixed; }
+.sched-table .sched-day-width { width: 132px; }
+.sched-table .sched-date-col { width: auto; white-space: normal; }
+.sched-table tbody tr { height: 126px; border-top: 2px solid #c9c0d6; }
+.sched-table tbody tr:nth-child(odd) { background: #f0ecf6; }
+.sched-table tbody tr:nth-child(even) { background: #fff; }
+.sched-table tbody td { border-inline-color: #d8d0e2; }
+.sched-table tbody .sched-date-col { padding: 1rem .9rem; background: #e7e0f0; }
+.sched-table tbody .sched-shift-cell { padding: .85rem 1rem !important; vertical-align: middle; }
+.sched-table .slot-name { overflow-wrap: anywhere; }
+.sched-table .sched-slot-row { min-height: 38px; font-size: .95rem; }
+.sched-table .sched-slot-row + .sched-slot-row { border-top: 0; }
+.sched-table .vol-empty { padding-top: .45rem; }
+.sched-table .sched-add-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+  min-height: 36px; padding: .4rem .85rem !important; font-size: .85rem !important;
+  font-weight: 650; color: #fff; background: #7156a5; border: 1px solid #7156a5;
+  border-radius: 8px; box-shadow: 0 2px 3px #49316512;
+}
+.sched-table .sched-add-btn:hover { background: #594184; border-color: #594184; color: #fff; }
+.sched-table .sched-add-btn:active { background: #48326e; color: #fff; }
+.sched-table .sched-today-row td { box-shadow: inset 0 2px #9170ba, inset 0 -2px #9170ba; }
+@media (max-width: 767px) {
+  .sched-table .sched-day-width { width: 98px; }
+  .sched-table tbody .sched-date-col { padding: .7rem .5rem; }
+  .sched-table tbody .sched-shift-cell { padding: .65rem .5rem !important; min-width: 0; }
+  .sched-table .sched-slot-row { font-size: .85rem; }
+  .sched-table .sched-add-btn { min-height: 40px; padding: .4rem .55rem !important; font-size: .8rem !important; }
+}
+.sched-table .sched-past-shift { opacity: .85; }
