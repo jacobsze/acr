@@ -2,6 +2,10 @@
 {% block title %}Upcoming – Petco86 Volunteer Schedule{% endblock %}
 
 {% block content %}
+<div class="home-intro mx-auto" style="max-width:860px;">
+  <p class="home-eyebrow">YOUR TIME WITH THE CATS</p>
+  <h1 class="mb-0">Upcoming Schedule</h1>
+</div>
 
 {# ── Week navigation ─────────────────────────────────────────────────────────────── #}
 
@@ -48,36 +52,28 @@
 {% set is_owner = current_user and current_user.role == 'owner' %}
 {% for week_info in all_weeks %}
 <div class="mb-4 mx-auto sched-mobile-full" style="max-width:860px;">
-  <div class="sched-week-hdr text-white text-center py-2 fw-bold">
+  <div class="schedule-week-title">
     {{ week_info.week_start.strftime('%b %-d') }} – {{ week_info.week_end.strftime('%b %-d, %Y') }}
   </div>
-  <div class="table-responsive">
-  <table class="table table-bordered sched-table mb-0">
-    <colgroup><col class="sched-day-width"><col><col></colgroup>
-    <thead>
-      <tr>
-        <th class="sched-date-col"></th>
-        <th class="text-center sched-am-hdr fw-bold">AM</th>
-        <th class="text-center sched-pm-hdr fw-bold">PM</th>
-      </tr>
-    </thead>
-    <tbody>
+  <div class="schedule-day-list">
       {% for d in week_info.week_dates %}
-      <tr {% if d == today %}class="sched-today-row"{% endif %}>
+      <section class="card schedule-day-card {% if d == today %}schedule-today{% endif %}">
 
         {# Day / date column #}
-        <td class="sched-date-col align-middle">
+        <header class="schedule-day-heading">
           <div class="fw-semibold" style="font-size:.95rem;">{{ day_names[loop.index0] }}</div>
           <div class="text-muted d-none d-sm-block" style="font-size:.82rem;">{{ d.strftime('%-m/%-d/%Y') }}</div>
           <div class="text-muted d-sm-none" style="font-size:.78rem;">{{ d.strftime('%-m/%-d') }}</div>
-        </td>
+        </header>
+        <div class="schedule-shifts">
 
         {# AM and PM cells #}
         {% for shift_type in ['AM', 'PM'] %}
         {% set slot = week_info.schedule[d][shift_type] %}
         {% set vols = slot.volunteers %}
         {% if is_owner %}{% set is_past = false %}{% else %}{% set is_past = (d < today) or (d == today and shift_type == 'AM' and now_hour >= 11) or (d == today and shift_type == 'PM' and now_hour >= 23) %}{% endif %}
-        <td class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if slot.count == 0 and d >= today %} sched-no-vol{% endif %}{% if is_past %} sched-past-shift{% endif %}">
+        <div class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if slot.count == 0 and d >= today %} sched-no-vol{% endif %}{% if is_past %} sched-past-shift{% endif %}">
+          <div class="schedule-shift-label"><span class="badge {{ 'home-am-badge' if shift_type == 'AM' else 'home-pm-badge' }}">{{ shift_type }}</span></div>
 
           {% if is_admin_mode %}
           {# ── ADMIN: one dropdown per slot ──────────────────────────────────────────── #}
@@ -146,12 +142,11 @@
           {% endif %}
 
           {% endif %}{# end admin/volunteer branch #}
-        </td>
+        </div>
         {% endfor %}{# shift_type #}
-      </tr>
+        </div>
+      </section>
       {% endfor %}{# day #}
-    </tbody>
-  </table>
   </div>
 </div>
 {% endfor %}{# week #}
@@ -336,7 +331,7 @@ function doRemove(btn) {
     slot.innerHTML = undoHTML(date, st, uid, uname);
     attachVolListeners(slot);
     // Show + button in first genuinely empty slot of this cell
-    const cell = slot.closest('td');
+    const cell = slot.closest('.sched-shift-cell');
     const emptySlot = Array.from(cell.querySelectorAll('.vol-slot.vol-empty')).find(s => !s.querySelector('.btn-add-self'));
     if (emptySlot) {
       emptySlot.innerHTML = addBtnHTML(date, st, uid, uname);
@@ -354,7 +349,7 @@ function doUndo(btn) {
   slot.innerHTML = mineHTML(date, st, uid, uname);
   attachVolListeners(slot);
   // If an add button was inserted, remove it
-  slot.closest('td').querySelectorAll('.vol-slot.vol-empty').forEach(s => s.remove());
+  slot.closest('.sched-shift-cell').querySelectorAll('.vol-slot.vol-empty').forEach(s => s.remove());
   updateSaveBar();
 }
 
@@ -444,5 +439,5 @@ window.addEventListener('beforeunload', e => {
 });
 
 </script>
-<script src="{{ url_for('static', filename='schedule-layout.js', v=config.APP_VERSION) }}"></script>
+
 {% endblock %}

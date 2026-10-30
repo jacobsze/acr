@@ -553,3 +553,38 @@ main { max-width: 1480px; margin: auto; }
   .sched-table .sched-add-btn { min-height: 40px; padding: .4rem .55rem !important; font-size: .8rem !important; }
 }
 .sched-table .sched-past-shift { opacity: .85; }
+
+/* Day cards share the homepage's surfaces instead of a spreadsheet grid. */
+.schedule-week-title { font-size: 1.3rem; font-weight: 650; letter-spacing: -.025em; margin: 1.5rem 0 1rem; }
+.schedule-day-list { display: grid; grid-auto-rows: 1fr; gap: 16px; }
+.schedule-day-card { padding: 1.1rem 1.25rem; min-width: 0; }
+.schedule-day-heading { display: flex; align-items: baseline; gap: .75rem; margin-bottom: .8rem; }
+.schedule-day-heading h2 { margin: 0; font-size: 1rem; }
+.schedule-shifts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; flex: 1; }
+.schedule-shifts > * { min-width: 0; }
+.schedule-day-card .sched-shift-cell { padding: 0 !important; min-width: 0; background: transparent !important; }
+.schedule-shift-label { margin-bottom: .5rem; }
+.schedule-day-card .sched-slot-row { min-height: 34px; font-size: .95rem; }
+.schedule-day-card .sched-slot-row + .sched-slot-row { border: 0; }
+.schedule-day-card .slot-name { overflow-wrap: anywhere; }
+.schedule-day-card .vol-empty { margin-top: .5rem; }
+.schedule-day-card .sched-past-shift { opacity: .85; }
+.schedule-today { border-color: #af96d0; box-shadow: 0 0 0 1px #af96d0, 0 4px 16px #7156a50a; }
+.schedule-day-card .sched-add-btn { display: inline-flex; align-items: center; gap: .4rem; min-height: 36px; padding: .4rem .8rem !important; font-size: .85rem !important; color: #fff; background: #7156a5; border-color: #7156a5; }
+.schedule-day-card .sched-add-btn:hover { background: #594184; border-color: #594184; }
+.regular-cards-wrap { max-width: 960px; margin: auto; }
+.regular-field-label { display: block; font-size: .72rem; color: #776d86; margin-bottom: .25rem; }
+.regular-slot-fields { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; margin-bottom: .7rem; }
+.regular-slot-fields .ts-control { min-height: 36px !important; padding: .5rem .65rem !important; }
+.regular-slot-fields .form-select { min-height: 36px; }
+.regular-slot-fields.slot-2-col { display: none; }
+.regular-slot-fields.slot-2-col.show { display: grid; }
+.regular-volunteer-name { padding: .3rem 0; overflow-wrap: anywhere; }
+.regular-card-actions { position: sticky; bottom: 0; background: #f7f7faf5; padding: 1rem 0; z-index: 10; }
+@media (max-width: 767px) {
+  .schedule-day-card { padding: 1rem; }
+  .schedule-shifts { gap: 16px; }
+  .schedule-day-card .sched-slot-row { font-size: .85rem; }
+  .schedule-day-card .sched-add-btn { min-height: 40px; }
+  .regular-slot-fields { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
