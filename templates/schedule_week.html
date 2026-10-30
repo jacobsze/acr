@@ -6,7 +6,7 @@
 {# ── Week navigation ─────────────────────────────────────────────────────────────── #}
 
 {% if is_admin_mode %}
-<div class="d-flex justify-content-end align-items-center gap-2 mt-3 mb-1 mx-auto sched-mobile-full flex-wrap" style="max-width:600px;">
+<div class="d-flex justify-content-end align-items-center gap-2 mt-3 mb-1 mx-auto sched-mobile-full flex-wrap" style="max-width:860px;">
   <form method="post" action="{{ url_for('admin.send_weekly_email') }}"
         onsubmit="return confirm('Send weekly schedule email now?')"
         class="d-flex align-items-center gap-1">
@@ -31,7 +31,7 @@
 </div>
 {% endif %}
 
-<div class="d-flex align-items-center justify-content-between mt-2 mb-3 mx-auto sched-mobile-full" style="max-width:600px;">
+<div class="d-flex align-items-center justify-content-between mt-2 mb-3 mx-auto sched-mobile-full" style="max-width:860px;">
   <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}"
      class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-chevron-left"></i> Prev
@@ -47,7 +47,7 @@
 {# ── Schedule tables (2 weeks) ──────────────────────────────────────────────────────── #}
 {% set is_owner = current_user and current_user.role == 'owner' %}
 {% for week_info in all_weeks %}
-<div class="mb-4 mx-auto sched-mobile-full" style="max-width:600px;">
+<div class="mb-4 mx-auto sched-mobile-full" style="max-width:860px;">
   <div class="sched-week-hdr text-white text-center py-2 fw-bold">
     {{ week_info.week_start.strftime('%b %-d') }} – {{ week_info.week_end.strftime('%b %-d, %Y') }}
   </div>
