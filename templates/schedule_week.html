@@ -62,8 +62,9 @@
         {% set slot = week_info.schedule[d][shift_type] %}
         {% set vols = slot.volunteers %}
         {% if is_owner %}{% set is_past = false %}{% else %}{% set is_past = (d < today) or (d == today and shift_type == 'AM' and now_hour >= 11) or (d == today and shift_type == 'PM' and now_hour >= 23) %}{% endif %}
-        <div class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if slot.count == 0 and d >= today %} sched-no-vol{% endif %}{% if is_past %} sched-past-shift{% endif %}">
-          <div class="schedule-shift-label"><span class="badge {{ 'home-am-badge' if shift_type == 'AM' else 'home-pm-badge' }}">{{ shift_type }}</span></div>
+        {% set can_fill = d >= today and not (d == today and ((shift_type == 'AM' and now_hour >= 11) or (shift_type == 'PM' and now_hour >= 23))) %}
+        <div data-can-fill="{{ 'true' if can_fill else 'false' }}" class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if can_fill and slot.count == 0 %} shift-uncovered{% elif can_fill and slot.count == 1 %} shift-available{% endif %}{% if is_past %} sched-past-shift{% endif %}">
+          <div class="schedule-shift-label"><span class="badge {{ 'home-am-badge' if shift_type == 'AM' else 'home-pm-badge' }}">{{ shift_type }}</span><span class="shift-coverage-status" aria-live="polite"{% if not can_fill or slot.count >= 2 %} hidden{% endif %}>{% if can_fill and slot.count == 0 %}Volunteer needed{% elif can_fill and slot.count == 1 %}1 spot available{% endif %}</span></div>
 
           {% if is_admin_mode %}
           {# ── ADMIN: one dropdown per slot ──────────────────────────────────────────── #}
@@ -94,9 +95,6 @@
           {% set my_name = effective_user.name %}
           {% set show_add = not slot.user_assigned and vols|length < 2 and not slot.is_full and d >= today and not is_past %}
 
-          {% if vols|length == 0 and d >= today %}
-            <div class="sched-slot-row sched-need-vol fw-bold">Need Volunteers</div>
-          {% endif %}
 
           {% for vol in vols %}
             <div class="sched-slot-row vol-slot {% if vol.id == my_id %}is-mine{% endif %}"
@@ -223,7 +221,24 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
 }
 
+function updateShiftCoverage() {
+  document.querySelectorAll('.sched-shift-cell').forEach(cell => {
+    const eligible = cell.dataset.canFill === 'true';
+    const count = IS_ADMIN
+      ? Array.from(cell.querySelectorAll('select.slot-select')).filter(select => select.value).length
+      : cell.querySelectorAll('.vol-slot:not(.vol-empty):not(.pending-remove)').length;
+    const uncovered = eligible && count === 0;
+    const available = eligible && count === 1;
+    cell.classList.toggle('shift-uncovered', uncovered);
+    cell.classList.toggle('shift-available', available);
+    const status = cell.querySelector('.shift-coverage-status');
+    status.textContent = uncovered ? 'Volunteer needed' : available ? '1 spot available' : '';
+    status.hidden = !uncovered && !available;
+  });
+}
+
 function updateSaveBar() {
+  updateShiftCoverage();
   const n = pendingAdds.length + pendingRemoves.length;
   const bar = document.getElementById('save-bar');
   document.getElementById('pending-label').textContent =
@@ -374,6 +389,7 @@ function undoHTML(date, st, uid, uname) {
 
 // Attach initial volunteer listeners
 if (!IS_ADMIN) attachVolListeners(document.body);
+updateShiftCoverage();
 
 // ── Save bar buttons ──────────────────────────────────────────────────────────────────
 
