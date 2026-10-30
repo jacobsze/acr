@@ -588,3 +588,21 @@ main { max-width: 1480px; margin: auto; }
   .schedule-day-card .sched-add-btn { min-height: 40px; }
   .regular-slot-fields { grid-template-columns: minmax(0, 1fr); gap: 6px; }
 }
+
+/* Compact upcoming cards: preserve the separate days, prioritize the schedule. */
+.upcoming-schedule .home-intro { padding: .65rem 0 .35rem; }
+.upcoming-schedule .home-intro h1 { font-size: 1.6rem; }
+.upcoming-schedule .schedule-week-title { margin: .65rem 0 .6rem; font-size: 1.1rem; }
+.upcoming-schedule .schedule-day-list { gap: 8px; }
+.upcoming-schedule .schedule-day-card { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; padding: .65rem 1rem; border-radius: 12px; }
+.upcoming-schedule .schedule-day-heading { flex-direction: column; justify-content: center; gap: .1rem; margin: 0; }
+.upcoming-schedule .schedule-shifts { gap: 20px; }
+.upcoming-schedule .schedule-shift-label { margin-bottom: .15rem; }
+.upcoming-schedule .sched-slot-row { min-height: 28px; padding: 0; }
+.upcoming-schedule .vol-empty { margin-top: .2rem; }
+.upcoming-schedule .sched-add-btn { min-height: 32px; padding: .25rem .65rem !important; }
+@media (max-width: 575px) {
+  .upcoming-schedule .schedule-day-card { grid-template-columns: minmax(0, 1fr); gap: .35rem; padding: .6rem .8rem; }
+  .upcoming-schedule .schedule-day-heading { flex-direction: row; justify-content: flex-start; align-items: baseline; gap: .5rem; }
+  .upcoming-schedule .sched-add-btn { min-height: 40px; }
+}
