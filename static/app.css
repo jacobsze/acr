@@ -638,3 +638,16 @@ main { max-width: 1480px; margin: auto; }
   .schedule-week-nav { margin-left: auto; }
   .schedule-week-nav .btn { min-height: 40px; }
 }
+
+/* Make uncovered shifts unmistakable without making every opening an alarm. */
+.upcoming-schedule .schedule-day-card .sched-shift-cell { padding: .4rem .55rem !important; border: 1px solid transparent; border-radius: 9px; }
+.upcoming-schedule .schedule-shift-label { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .45rem; }
+.upcoming-schedule .schedule-day-card .shift-uncovered { background: #fff3e0 !important; border-color: #dfb36a; box-shadow: inset 3px 0 #b87517; }
+.shift-coverage-status { font-size: .72rem; font-weight: 600; line-height: 1.3; color: #776d86; }
+.shift-uncovered .shift-coverage-status { color: #82500c; font-weight: 750; }
+.shift-uncovered .shift-coverage-status::before { content: '!'; display: inline-flex; justify-content: center; align-items: center; width: 14px; height: 14px; margin-right: 4px; background: #82500c; color: #fff; border-radius: 50%; font-size: .65rem; }
+.upcoming-schedule .shift-uncovered .sched-add-btn { background: #82500c; border-color: #82500c; }
+.upcoming-schedule .shift-uncovered .sched-add-btn:hover { background: #643b07; border-color: #643b07; }
+@media (max-width: 575px) {
+  .upcoming-schedule .schedule-shifts { gap: 8px; }
+}
