@@ -606,3 +606,35 @@ main { max-width: 1480px; margin: auto; }
   .upcoming-schedule .schedule-day-heading { flex-direction: row; justify-content: flex-start; align-items: baseline; gap: .5rem; }
   .upcoming-schedule .sched-add-btn { min-height: 40px; }
 }
+
+/* Keep the displayed week and its controls visible beneath the app navigation. */
+.schedule-toolbar { position: sticky; top: var(--schedule-nav-height, 72px); z-index: 100; max-width: 860px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: .7rem 0; margin-bottom: .5rem; background: #f7f7fa; border-bottom: 1px solid #e3ddea; }
+.schedule-toolbar h1 { margin: 0; font-size: 1.35rem; letter-spacing: -.025em; }
+.schedule-week-nav { display: flex; gap: 6px; flex-shrink: 0; }
+.schedule-week-nav .btn { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; white-space: nowrap; }
+.upcoming-schedule .schedule-day-past { background: #eeedf1; border-color: #e1dfe5; box-shadow: none; color: #696570; }
+.schedule-day-past .home-am-badge, .schedule-day-past .home-pm-badge { background: #e1dfe5; color: #625e69; }
+.schedule-today-label { display: inline-block; border-radius: 5px; padding: .1rem .4rem; color: #60428c; background: #eee7f7; font-size: .68rem; font-weight: 700; }
+
+/* A narrower, denser weekly template while keeping all editing controls. */
+.regular-cards-wrap { max-width: 760px; }
+.regular-cards-wrap .home-intro { padding: .65rem 0 .8rem; }
+.regular-cards-wrap .home-intro h1 { font-size: 1.6rem; margin-bottom: .35rem; }
+.regular-cards-wrap .home-eyebrow { margin-bottom: .3rem; }
+.regular-cards-wrap .schedule-day-list { gap: 8px; }
+.regular-cards-wrap .schedule-day-card { padding: .65rem .85rem; border-radius: 12px; }
+.regular-cards-wrap .schedule-day-heading { margin-bottom: .4rem; }
+.regular-cards-wrap .schedule-shifts { gap: 16px; }
+.regular-cards-wrap .schedule-shift-label { margin-bottom: .2rem; }
+.regular-cards-wrap .regular-slot-fields { gap: 6px; margin-bottom: .35rem; }
+.regular-cards-wrap .regular-slot-fields:last-child { margin-bottom: 0; }
+.regular-cards-wrap .regular-slot-fields .ts-control { min-height: 32px !important; padding: .35rem .45rem !important; }
+.regular-cards-wrap .regular-slot-fields .form-select { min-height: 32px; }
+.regular-cards-wrap .regular-volunteer-name { padding: .1rem 0; font-size: .9rem; }
+.regular-cards-wrap .regular-card-actions { padding: .6rem 0; }
+@media (max-width: 575px) {
+  .schedule-toolbar { flex-wrap: wrap; gap: .4rem; padding: .5rem 0; }
+  .schedule-toolbar h1 { font-size: 1.15rem; }
+  .schedule-week-nav { margin-left: auto; }
+  .schedule-week-nav .btn { min-height: 40px; }
+}
