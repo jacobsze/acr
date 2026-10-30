@@ -3,11 +3,17 @@
 
 {% block content %}
 <div class="upcoming-schedule">
-<div class="home-intro mx-auto" style="max-width:860px;">
-  <h1 class="mb-0">Upcoming Schedule</h1>
-</div>
-
-{# ── Week navigation ─────────────────────────────────────────────────────────────── #}
+<header class="schedule-toolbar mx-auto">
+  <div>
+    <p class="home-eyebrow mb-1">UPCOMING SCHEDULE</p>
+    <h1>{{ all_weeks[0].week_start.strftime('%b %-d') }} – {{ all_weeks[0].week_end.strftime('%b %-d, %Y') }}</h1>
+  </div>
+  <nav class="schedule-week-nav" aria-label="Week navigation">
+    <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}" class="btn btn-outline-secondary btn-sm" aria-label="Previous week"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
+    <a href="{{ url_for('schedule.week_view', week_start=current_week_start) }}" class="btn btn-outline-secondary btn-sm">Go to today</a>
+    <a href="{{ url_for('schedule.week_view', week_start=next_week) }}" class="btn btn-outline-secondary btn-sm" aria-label="Next week"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+  </nav>
+</header>
 
 {% if is_admin_mode %}
 <div class="d-flex justify-content-end align-items-center gap-2 mt-3 mb-1 mx-auto sched-mobile-full flex-wrap" style="max-width:860px;">
@@ -35,35 +41,19 @@
 </div>
 {% endif %}
 
-<div class="d-flex align-items-center justify-content-between mt-2 mb-3 mx-auto sched-mobile-full" style="max-width:860px;">
-  <a href="{{ url_for('schedule.week_view', week_start=prev_week) }}"
-     class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-chevron-left"></i> Prev
-  </a>
-  <a href="{{ url_for('schedule.week_view', week_start=current_week_start) }}"
-     class="btn btn-outline-secondary btn-sm">Today</a>
-  <a href="{{ url_for('schedule.week_view', week_start=next_week) }}"
-     class="btn btn-outline-secondary btn-sm">
-    Next <i class="bi bi-chevron-right"></i>
-  </a>
-</div>
-
-{# ── Schedule tables (2 weeks) ──────────────────────────────────────────────────────── #}
 {% set is_owner = current_user and current_user.role == 'owner' %}
 {% for week_info in all_weeks %}
 <div class="mb-4 mx-auto sched-mobile-full" style="max-width:860px;">
-  <div class="schedule-week-title">
-    {{ week_info.week_start.strftime('%b %-d') }} – {{ week_info.week_end.strftime('%b %-d, %Y') }}
-  </div>
   <div class="schedule-day-list">
       {% for d in week_info.week_dates %}
-      <section class="card schedule-day-card {% if d == today %}schedule-today{% endif %}">
+      <section class="card schedule-day-card {% if d == today %}schedule-today{% elif d < today %}schedule-day-past{% endif %}">
 
         {# Day / date column #}
         <header class="schedule-day-heading">
           <div class="fw-semibold" style="font-size:.95rem;">{{ day_names[loop.index0] }}</div>
           <div class="text-muted d-none d-sm-block" style="font-size:.82rem;">{{ d.strftime('%-m/%-d/%Y') }}</div>
           <div class="text-muted d-sm-none" style="font-size:.78rem;">{{ d.strftime('%-m/%-d') }}</div>
+          {% if d == today %}<span class="schedule-today-label">Today</span>{% endif %}
         </header>
         <div class="schedule-shifts">
 
@@ -211,6 +201,14 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
+// Keep the week toolbar directly beneath the responsive main navigation.
+const mainNav = document.querySelector('.acr-navbar');
+function syncScheduleOffset() {
+  document.documentElement.style.setProperty('--schedule-nav-height', `${mainNav.getBoundingClientRect().height}px`);
+}
+syncScheduleOffset();
+new ResizeObserver(syncScheduleOffset).observe(mainNav);
+
 const IS_ADMIN = {{ 'true' if is_admin_mode else 'false' }};
 const MY_ID    = {{ effective_user.id }};
 const MY_NAME  = {{ effective_user.name | tojson }};
