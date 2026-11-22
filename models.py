@@ -79,6 +79,19 @@ class ShiftAssignment(db.Model):
     )
 
 
+class ShiftClosure(db.Model):
+    """A date-specific closure; assignments are retained for reopening/history."""
+    __tablename__ = "shift_closures"
+    date = db.Column(db.Date, primary_key=True)
+    shift_type = db.Column(db.String(2), primary_key=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    @classmethod
+    def is_closed(cls, shift_date, shift_type):
+        return db.session.get(cls, (shift_date, shift_type)) is not None
+
+
 class ScheduleChangeLog(db.Model):
     """Audit trail for upcoming and regular schedule changes."""
 

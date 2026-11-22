@@ -651,3 +651,7 @@ main { max-width: 1480px; margin: auto; }
 @media (max-width: 575px) {
   .upcoming-schedule .schedule-shifts { gap: 8px; }
 }
+
+.upcoming-schedule .schedule-day-card .shift-closed { background: #eeedf1 !important; border: 1px dashed #bdb5c8; }
+.closed-shift-label { color: #625573; font-weight: 700; margin-top: .25rem; }
+.shift-closure-form .btn { font-size: .72rem; min-height: 28px; padding: .2rem .45rem; }

@@ -62,10 +62,22 @@
         {% set slot = week_info.schedule[d][shift_type] %}
         {% set vols = slot.volunteers %}
         {% if is_owner %}{% set is_past = false %}{% else %}{% set is_past = (d < today) or (d == today and shift_type == 'AM' and now_hour >= 11) or (d == today and shift_type == 'PM' and now_hour >= 23) %}{% endif %}
-        {% set can_fill = d >= today and not (d == today and ((shift_type == 'AM' and now_hour >= 11) or (shift_type == 'PM' and now_hour >= 23))) %}
-        <div data-can-fill="{{ 'true' if can_fill else 'false' }}" class="sched-shift-cell {% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if can_fill and slot.count == 0 %} shift-uncovered{% elif can_fill and slot.count == 1 %} shift-available{% endif %}{% if is_past %} sched-past-shift{% endif %}">
+        {% set can_fill = not slot.is_closed and d >= today and not (d == today and ((shift_type == 'AM' and now_hour >= 11) or (shift_type == 'PM' and now_hour >= 23))) %}
+        <div data-can-fill="{{ 'true' if can_fill else 'false' }}" class="sched-shift-cell {% if slot.is_closed %}shift-closed {% endif %}{% if shift_type == 'AM' %}sched-am-cell{% else %}sched-pm-cell{% endif %}{% if can_fill and slot.count == 0 %} shift-uncovered{% elif can_fill and slot.count == 1 %} shift-available{% endif %}{% if is_past %} sched-past-shift{% endif %}">
           <div class="schedule-shift-label"><span class="badge {{ 'home-am-badge' if shift_type == 'AM' else 'home-pm-badge' }}">{{ shift_type }}</span><span class="shift-coverage-status" aria-live="polite"{% if not can_fill or slot.count >= 2 %} hidden{% endif %}>{% if can_fill and slot.count == 0 %}Volunteer needed{% elif can_fill and slot.count == 1 %}1 spot available{% endif %}</span></div>
 
+          {% if is_admin_mode %}
+          <form method="post" action="{{ url_for('schedule.set_shift_closure') }}" class="shift-closure-form mb-1">
+            <input type="hidden" name="date" value="{{ d.isoformat() }}">
+            <input type="hidden" name="shift_type" value="{{ shift_type }}">
+            <input type="hidden" name="state" value="{{ 'open' if slot.is_closed else 'closed' }}">
+            <button class="btn btn-sm btn-outline-secondary" type="submit" aria-label="{{ 'Reopen' if slot.is_closed else 'Close' }} {{ d.strftime('%b %-d') }} {{ shift_type }} shift">{{ 'Reopen shift' if slot.is_closed else 'Close shift' }}</button>
+          </form>
+          {% endif %}
+          {% if slot.is_closed %}
+            <div class="closed-shift-label"><i class="bi bi-lock" aria-hidden="true"></i> Closed</div>
+            <div class="small text-muted">No volunteers needed</div>
+          {% else %}
           {% if is_admin_mode %}
           {# ── ADMIN: one dropdown per slot ──────────────────────────────────────────── #}
           {% for slot_idx in range(cap) %}
@@ -130,6 +142,7 @@
           {% endif %}
 
           {% endif %}{# end admin/volunteer branch #}
+          {% endif %}{# closed shift #}
         </div>
         {% endfor %}{# shift_type #}
         </div>
@@ -394,6 +407,21 @@ updateShiftCoverage();
 // ── Save bar buttons ──────────────────────────────────────────────────────────────────
 
 let leavingIntentionally = false;
+document.querySelectorAll('.shift-closure-form').forEach(form => {
+  form.addEventListener('submit', event => {
+    if (pendingAdds.length || pendingRemoves.length) {
+      event.preventDefault();
+      alert('Save or discard your pending assignment changes first.');
+      return;
+    }
+    const closing = form.elements.state.value === 'closed';
+    if (!confirm(closing ? 'Close this shift? No volunteers will be needed. Existing assignments will be kept for reopening.' : 'Reopen this shift and restore its assignments?')) {
+      event.preventDefault();
+      return;
+    }
+    leavingIntentionally = true;
+  });
+});
 
 document.getElementById('btn-discard')?.addEventListener('click', () => {
   leavingIntentionally = true;

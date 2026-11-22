@@ -19,8 +19,10 @@ _TD_BASE = "border:1px solid #ccc; padding:7px 10px; vertical-align:top;"
 
 # ── Shared HTML helpers ───────────────────────────────────────────────────────
 
-def _cell(names, bg, highlight=False):
+def _cell(names, bg, highlight=False, closed=False):
     """Render one AM or PM schedule cell."""
+    if closed:
+        return f'<td style="{_TD_BASE} background:#eeedf1; text-align:center;"><strong>Closed</strong><br>No volunteers needed</td>'
     if not names:
         style = f"{_TD_BASE} background:{bg}; text-align:center; color:#cc0000; font-weight:bold;"
         return f'<td style="{style}">Need Volunteers</td>'
@@ -61,7 +63,7 @@ def _build_table(all_weeks, highlight_date=None, highlight_shifts=None):
                 f'<td style="{_TD_BASE} white-space:nowrap; font-size:0.85em;">'
                 f'{d.strftime("%A")}<br>{d.strftime("%-m/%-d/%Y")}</td>'
             )
-            rows.append(f"<tr>{date_cell}{_cell(am_names, _AM_CELL, hi_am)}{_cell(pm_names, _PM_CELL, hi_pm)}</tr>")
+            rows.append(f"<tr>{date_cell}{_cell(am_names, _AM_CELL, hi_am, sched['AM'].get('is_closed', False))}{_cell(pm_names, _PM_CELL, hi_pm, sched['PM'].get('is_closed', False))}</tr>")
 
     rows.append("</table>")
     return "\n".join(rows)
@@ -161,7 +163,7 @@ def _open_shifts_for_date(target_date, override_open=None):
         return list(override_open)
     from routes.schedule_routes import build_schedule
     sched = build_schedule([target_date], None)
-    return [st for st in ("AM", "PM") if sched[target_date][st]["count"] == 0]
+    return [st for st in ("AM", "PM") if not sched[target_date][st].get("is_closed", False) and sched[target_date][st]["count"] == 0]
 
 
 def _open_shift_subject(open_shifts, target_date):

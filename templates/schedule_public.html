@@ -31,7 +31,8 @@
                 </td>
                 <td>
                   {% set am_vols = week['schedule'][d]['AM']['volunteers'] %}
-                  {% if am_vols %}
+                  {% if week['schedule'][d]['AM']['is_closed'] %}<strong>Closed</strong><div class="small text-muted">No volunteers needed</div>
+                  {% elif am_vols %}
                     {% for vol in am_vols %}
                       <div>{{ vol.name }}</div>
                     {% endfor %}
@@ -41,7 +42,8 @@
                 </td>
                 <td>
                   {% set pm_vols = week['schedule'][d]['PM']['volunteers'] %}
-                  {% if pm_vols %}
+                  {% if week['schedule'][d]['PM']['is_closed'] %}<strong>Closed</strong><div class="small text-muted">No volunteers needed</div>
+                  {% elif pm_vols %}
                     {% for vol in pm_vols %}
                       <div>{{ vol.name }}</div>
                     {% endfor %}
