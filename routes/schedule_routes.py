@@ -6,8 +6,8 @@ from flask import (
     request, session, url_for, current_app,
 )
 
-from models import db, User, RegularSchedule, ShiftAssignment, ScheduleChangeLog
-from auth_utils import login_required, owner_required, get_current_user
+from models import db, User, RegularSchedule, ShiftAssignment, ScheduleChangeLog, ShiftClosure
+from auth_utils import login_required, owner_required, admin_required, get_current_user
 from services.schedule_cron import should_schedule_on_week
 
 schedule_bp = Blueprint("schedule", __name__)
@@ -42,6 +42,8 @@ def get_week_dates(week_start: date) -> list[date]:
 
 
 def materialize_if_needed(target_date: date, shift_type: str) -> None:
+    if ShiftClosure.is_closed(target_date, shift_type):
+        return
     existing = ShiftAssignment.query.filter_by(
         date=target_date, shift_type=shift_type
     ).count()
@@ -125,6 +127,7 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
     )
     removed_set = {(r.date, r.shift_type, r.volunteer_id) for r in removals}
 
+    closed = {(c.date, c.shift_type) for c in ShiftClosure.query.filter(ShiftClosure.date.in_(week_dates)).all()}
     cap = current_app.config["MAX_VOLUNTEERS_PER_SHIFT"]
     schedule = {}
     for d in week_dates:
@@ -152,7 +155,11 @@ def build_schedule(week_dates: list[date], effective_user: User | None) -> dict:
                 if (d, shift_type, v.id) not in removed_set or v.id in explicit_assignment_ids
             ]
 
+            is_closed = key in closed
+            if is_closed:
+                volunteers = []
             schedule[d][shift_type] = {
+                "is_closed": is_closed,
                 "volunteers": volunteers,
                 "count": len(volunteers),
                 "is_full": len(volunteers) >= cap,
@@ -212,12 +219,15 @@ def home():
     for rs in all_regular:
         regular_by_dow.setdefault((rs.day_of_week, rs.shift_type), []).append(rs)
 
+    closed = {(c.date, c.shift_type) for c in ShiftClosure.query.filter(ShiftClosure.date >= today, ShiftClosure.date <= end).all()}
     days = []
     for i in range(28):
         d = today + timedelta(days=i)
         my_shifts = []
         for st in ["AM", "PM"]:
             key = (d, st)
+            if key in closed:
+                continue
             if key in shift_map:
                 vols = sorted(shift_map[key], key=lambda u: u.name)
             else:
@@ -269,6 +279,10 @@ def add_to_shift():
         flash("Cannot add to a past shift.", "error")
         return redirect(url_for("schedule.home"))
 
+    if ShiftClosure.is_closed(d, shift_type):
+        flash("That shift is closed.", "error")
+        return redirect(url_for("schedule.home"))
+
     materialize_if_needed(d, shift_type)
 
     if ShiftAssignment.query.filter_by(date=d, shift_type=shift_type, user_id=g.user.id).first():
@@ -313,6 +327,10 @@ def remove_from_shift():
         shift_type = request.form["shift_type"]
     except (KeyError, ValueError):
         flash("Invalid request.", "error")
+        return redirect(url_for("schedule.home"))
+
+    if ShiftClosure.is_closed(d, shift_type):
+        flash("That shift is closed. Reopen it before editing assignments.", "error")
         return redirect(url_for("schedule.home"))
 
     materialize_if_needed(d, shift_type)
@@ -434,6 +452,10 @@ def bulk_save():
             errors.append("You can only remove yourself from shifts.")
             continue
 
+        if ShiftClosure.is_closed(d, shift_type):
+            errors.append(f"Shift on {d.strftime('%b %-d')} {shift_type} is closed. Reopen it before editing assignments.")
+            continue
+
         materialize_if_needed(d, shift_type)
 
         assignment = ShiftAssignment.query.filter_by(
@@ -466,6 +488,10 @@ def bulk_save():
 
         target = User.query.get(user_id)
         if not target:
+            continue
+
+        if ShiftClosure.is_closed(d, shift_type):
+            errors.append(f"Shift on {d.strftime('%b %-d')} {shift_type} is closed. Reopen it before editing assignments.")
             continue
 
         materialize_if_needed(d, shift_type)
@@ -522,3 +548,33 @@ def bulk_save():
         ws = get_week_start()
 
     return redirect(url_for("schedule.week_view", week_start=ws.isoformat()))
+
+
+@schedule_bp.route("/shifts/closure", methods=["POST"])
+@admin_required
+def set_shift_closure():
+    if g.effective_user.id != g.user.id:
+        return "Return to your admin view to change closures.", 403
+    try:
+        d = date.fromisoformat(request.form["date"])
+        shift_type = request.form["shift_type"]
+        state = request.form["state"]
+        if shift_type not in ("AM", "PM") or state not in ("closed", "open"):
+            raise ValueError()
+    except (KeyError, ValueError):
+        return "Invalid shift closure.", 400
+    closure = db.session.get(ShiftClosure, (d, shift_type))
+    changed = False
+    if state == "closed" and closure is None:
+        db.session.add(ShiftClosure(date=d, shift_type=shift_type, created_by_id=g.user.id))
+        changed = True
+    elif state == "open" and closure is not None:
+        db.session.delete(closure)
+        changed = True
+    if changed:
+        db.session.add(ScheduleChangeLog(log_type="upcoming", date=d, shift_type=shift_type,
+            action="close" if state == "closed" else "reopen", changed_by_id=g.user.id,
+            changed_by_note="Shift closed" if state == "closed" else "Shift reopened"))
+        db.session.commit()
+    flash(f"{d.strftime('%b %-d')} {shift_type} is now {state}.", "success")
+    return redirect(url_for("schedule.week_view", week_start=get_week_start(d).isoformat()))

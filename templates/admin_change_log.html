@@ -44,7 +44,7 @@
               {{ dow_names[log.day_of_week] }}
             {% else %}—{% endif %}
           </td>
-          <td>{{ log.shift_type }}</td>
+          <td>{{ log.shift_type }}{% if log.action in ('close', 'reopen') %}<br><span class="badge bg-secondary">{{ 'Closed' if log.action == 'close' else 'Reopened' }}</span>{% endif %}</td>
           <td class="text-danger">
             {% if log.action == 'remove' %}{{ log.volunteer_name }}{% else %}—{% endif %}
           </td>
