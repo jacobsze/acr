@@ -431,18 +431,22 @@ document.getElementById('btn-discard')?.addEventListener('click', () => {
 document.getElementById('btn-save')?.addEventListener('click', () => {
   const list = document.getElementById('confirm-list');
   list.innerHTML = '';
-  pendingRemoves.forEach(r => {
-    list.innerHTML += `<li class="text-danger mb-1">
-      <i class="bi bi-dash-circle"></i>
-      Remove from <strong>${r.shift_type}</strong> on ${fmtDate(r.date)}
-    </li>`;
-  });
-  pendingAdds.forEach(a => {
-    list.innerHTML += `<li class="text-success mb-1">
-      <i class="bi bi-plus-circle"></i>
-      Add <strong>${a.shift_type}</strong> on ${fmtDate(a.date)}
-    </li>`;
-  });
+  function appendChange(change, removing) {
+    const item = document.createElement('li');
+    item.className = `${removing ? 'text-danger' : 'text-success'} mb-1`;
+    const icon = document.createElement('i');
+    icon.className = `bi bi-${removing ? 'dash' : 'plus'}-circle`;
+    icon.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('strong');
+    name.textContent = change.name;
+    const shift = document.createElement('strong');
+    shift.textContent = change.shift_type;
+    item.append(icon, removing ? ' Remove ' : ' Add ', name,
+      removing ? ' from ' : ' to ', shift, ` on ${fmtDate(change.date)}`);
+    list.append(item);
+  }
+  pendingRemoves.forEach(change => appendChange(change, true));
+  pendingAdds.forEach(change => appendChange(change, false));
   if (IS_ADMIN) {
     document.getElementById('confirm-intro').textContent = 'Save the following changes?';
     document.getElementById('btn-confirm-label').textContent = 'Save changes';
